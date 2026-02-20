@@ -57,6 +57,8 @@ const TRANSLATIONS = {
     canvasNotFound: 'Board canvas not found.',
     pngFailed: 'Could not generate PNG from board.',
     copyFailed: (msg) => `Could not copy PNG: ${msg}`,
+    downloadedPng: 'Clipboard not available. PNG downloaded.',
+    taintedCanvas: 'Canvas cannot be exported due to external assets (CORS).',
     engineRequestFailed: (msg) => `Engine request failed: ${msg}`,
     invalidEngineMove: 'Engine response does not contain a move',
     promotionPrompt: 'Promotion piece? (q=Queen, r=Rook, b=Bishop, n=Knight)',
@@ -101,6 +103,8 @@ const TRANSLATIONS = {
     canvasNotFound: 'No se encontró el canvas del tablero.',
     pngFailed: 'No se pudo generar el PNG del tablero.',
     copyFailed: (msg) => `No se pudo copiar PNG: ${msg}`,
+    downloadedPng: 'Portapapeles no disponible. PNG descargado.',
+    taintedCanvas: 'No se puede exportar el canvas por recursos externos (CORS).',
     engineRequestFailed: (msg) => `Falló la petición al motor: ${msg}`,
     invalidEngineMove: 'La respuesta del motor no contiene jugada',
     promotionPrompt: 'Pieza de promocion? (q=dama, r=torre, b=alfil, n=caballo)',
@@ -145,6 +149,8 @@ const TRANSLATIONS = {
     canvasNotFound: 'Canvas do tabuleiro nao encontrado.',
     pngFailed: 'Nao foi possivel gerar PNG do tabuleiro.',
     copyFailed: (msg) => `Nao foi possivel copiar PNG: ${msg}`,
+    downloadedPng: 'Area de transferencia indisponivel. PNG baixado.',
+    taintedCanvas: 'Nao foi possivel exportar o canvas por recursos externos (CORS).',
     engineRequestFailed: (msg) => `Falha na requisicao do motor: ${msg}`,
     invalidEngineMove: 'Resposta do motor sem jogada',
     promotionPrompt: 'Peca de promocao? (q=dama, r=torre, b=bispo, n=cavalo)',
@@ -189,6 +195,8 @@ const TRANSLATIONS = {
     canvasNotFound: 'Canvas della scacchiera non trovato.',
     pngFailed: 'Impossibile generare PNG della scacchiera.',
     copyFailed: (msg) => `Impossibile copiare PNG: ${msg}`,
+    downloadedPng: 'Appunti non disponibili. PNG scaricato.',
+    taintedCanvas: 'Impossibile esportare il canvas per risorse esterne (CORS).',
     engineRequestFailed: (msg) => `Richiesta al motore fallita: ${msg}`,
     invalidEngineMove: 'Risposta del motore senza mossa',
     promotionPrompt: 'Pezzo di promozione? (q=donna, r=torre, b=alfiere, n=cavallo)',
@@ -690,37 +698,81 @@ export default function App() {
     }
   }
 
+  async function canvasToPngBlob(canvas) {
+    try {
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob((result) => resolve(result), 'image/png')
+      })
+      if (blob) {
+        return blob
+      }
+    } catch (err) {
+      if (err?.name === 'SecurityError') {
+        throw new Error(tt().taintedCanvas)
+      }
+      throw err
+    }
+
+    // Fallback path for browsers where toBlob can fail on WebGL canvases.
+    try {
+      const dataUrl = canvas.toDataURL('image/png')
+      const res = await fetch(dataUrl)
+      return await res.blob()
+    } catch (err) {
+      if (err?.name === 'SecurityError') {
+        throw new Error(tt().taintedCanvas)
+      }
+      throw new Error(tt().pngFailed)
+    }
+  }
+
+  function downloadPng(blob, filename) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   async function copyBoardPngToClipboard() {
     setError('')
 
     try {
-      if (!window.isSecureContext || !navigator.clipboard || !window.ClipboardItem) {
-        throw new Error(tt().clipboardSecure)
-      }
-
       const boardHost = document.getElementById(BOARD_CONTAINER_ID)
       const canvas = boardHost?.querySelector('canvas')
       if (!canvas) {
         throw new Error(tt().canvasNotFound)
       }
 
-      const blob = await new Promise((resolve) => {
-        canvas.toBlob((result) => resolve(result), 'image/png')
-      })
+      const blob = await canvasToPngBlob(canvas)
+      const ClipboardItemCtor = window.ClipboardItem
+      const canCopy =
+        window.isSecureContext
+        && !!navigator.clipboard
+        && typeof navigator.clipboard.write === 'function'
+        && typeof ClipboardItemCtor === 'function'
 
-      if (!blob) {
-        throw new Error(tt().pngFailed)
+      if (canCopy) {
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItemCtor({
+              'image/png': blob,
+            }),
+          ])
+          setStatus(tt().copiedPng)
+          return
+        } catch {
+          // Fall through to file download.
+        }
       }
 
-      await navigator.clipboard.write([
-        new window.ClipboardItem({
-          'image/png': blob,
-        }),
-      ])
-
-      setStatus(tt().copiedPng)
+      downloadPng(blob, 'chess3d-board.png')
+      setStatus(tt().downloadedPng)
     } catch (err) {
-      setError(tt().copyFailed(err.message))
+      setError(tt().copyFailed(err?.message || tt().clipboardSecure))
     }
   }
 
