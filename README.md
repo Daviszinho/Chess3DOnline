@@ -10,21 +10,28 @@ Cliente web **Vite + React** para jugar ajedrez 3D contra motores de ajedrez usa
   - `GET /api/health`
   - `POST /api/move`
 - Seleccion de motor y nivel (`1-20`).
-- Jugar como blancas o negras.
+- Juego contra IA eligiendo color inicial (`blancas` o `negras`).
 - Reglas especiales soportadas:
   - enroque
   - en passant
   - promocion de peon con seleccion de pieza (`dama`, `torre`, `alfil`, `caballo`)
 - Undo completo (deshace turno completo cuando aplica).
-- FEN editable con recarga de posicion.
-- Historial de jugadas en tabla (blancas / negras).
-- Exportar partida como PGN (copiar al portapapeles o descargar archivo `.pgn`).
+- Campo FEN editable con recarga de posicion.
+- Historial de jugadas en tabla (turno / blancas / negras).
+- Exportacion de partida en **PGN**:
+  - boton visible: **Copy PGN**
+  - si el clipboard falla, hace fallback automatico a descarga `.pgn`
 - Temas de tablero:
   - cafe / crema
   - blanco / gris
   - celeste / azul
   - amarillo claro / verde
-- Multilenguaje: ingles, espanol, portugues, italiano.
+- Interfaz multilenguaje:
+  - ingles
+  - espanol
+  - portugues
+  - italiano
+- Diseño responsive para desktop y moviles.
 - PWA (manifest + service worker).
 
 ## Stack
@@ -42,7 +49,7 @@ Cliente web **Vite + React** para jugar ajedrez 3D contra motores de ajedrez usa
 
 ## Variables de entorno
 
-Este proyecto ya viene preparado para Azure:
+El proyecto esta preparado para Azure:
 
 - Desarrollo local: `.env.development` usa `VITE_CHESS_API_BASE=/api` (proxy Vite).
 - Produccion: `.env.production` usa la URL publica del backend.
@@ -70,13 +77,13 @@ npm run build
 npm run preview
 ```
 
-## Deploy en Azure Free (recomendado: Static Web Apps)
+## Deploy en Azure Free
 
-Esta app es frontend estatico, por lo que **Azure Static Web Apps Free** es la opcion mas directa.
+### Opcion recomendada: Azure Static Web Apps (Free)
 
 1. Sube el repo a GitHub (`daviszinho/Chess3DOnline`).
 2. En Azure Portal crea un recurso **Static Web App** (plan Free).
-3. Conecta el repositorio y rama `main`.
+3. Conecta el repo y rama `main`.
 4. Configura build:
 
 - App location: `/`
@@ -87,12 +94,15 @@ Esta app es frontend estatico, por lo que **Azure Static Web Apps Free** es la o
 
 - `NODE_VERSION=22`
 
-El archivo `public/staticwebapp.config.json` ya esta incluido para fallback SPA y headers.
+`public/staticwebapp.config.json` ya esta incluido para fallback SPA y headers.
 
-## Deploy alternativo en App Service Free (B1/F1)
+### Opcion alternativa: Azure App Service (F1)
 
-Si prefieres App Service, publica el contenido de `dist/` como sitio estatico.
-Aun asi, para este proyecto es mas simple y barato usar Static Web Apps Free.
+Si usas App Service Linux (Code), despliega `dist` y configura startup command:
+
+```bash
+pm2 serve /home/site/wwwroot --no-daemon --spa
+```
 
 ## Publicar en GitHub
 
