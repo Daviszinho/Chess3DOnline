@@ -18,7 +18,7 @@ Cliente web **Vite + React** para jugar ajedrez 3D contra motores de ajedrez usa
 - Undo completo (deshace turno completo cuando aplica).
 - FEN editable con recarga de posicion.
 - Historial de jugadas en tabla (blancas / negras).
-- Exportar tablero como PNG al portapapeles.
+- Exportar partida como PGN (copiar al portapapeles o descargar archivo `.pgn`).
 - Temas de tablero:
   - cafe / crema
   - blanco / gris

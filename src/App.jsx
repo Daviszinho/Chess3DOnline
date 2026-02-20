@@ -36,7 +36,10 @@ const TRANSLATIONS = {
     newGame: 'New game',
     undo: 'Undo',
     flip: 'Flip',
+    copyPgn: 'Copy PGN',
+    downloadPgn: 'Download PGN',
     copyPng: 'Copy PNG',
+    downloadPng: 'Download PNG',
     engineMoveNow: 'Engine move now',
     statusLabel: 'Status',
     fen: 'FEN',
@@ -50,6 +53,9 @@ const TRANSLATIONS = {
     toMove: (side, check) => `${side} to move${check ? ` (${check})` : ''}`,
     thinking: (engine) => `${engine} is thinking...`,
     moveFailed: 'Move failed. Try again.',
+    copiedPgn: 'PGN copied to clipboard.',
+    downloadedPgnText: 'Clipboard unavailable. PGN downloaded.',
+    copyPgnFailed: (msg) => `Could not copy PGN: ${msg}`,
     copiedPng: 'Board PNG copied to clipboard.',
     engineUnavailable: (msg) => `Engines endpoint unavailable (${msg}). Using fallback list.`,
     failedInit: 'Failed to initialize chessboard3',
@@ -83,7 +89,10 @@ const TRANSLATIONS = {
     newGame: 'Nueva partida',
     undo: 'Deshacer',
     flip: 'Girar',
+    copyPgn: 'Copiar PGN',
+    downloadPgn: 'Descargar PGN',
     copyPng: 'Copiar PNG',
+    downloadPng: 'Descargar PNG',
     engineMoveNow: 'Jugada del motor',
     statusLabel: 'Estado',
     fen: 'FEN',
@@ -97,6 +106,9 @@ const TRANSLATIONS = {
     toMove: (side, check) => `Turno de ${side}${check ? ` (${check})` : ''}`,
     thinking: (engine) => `${engine} está pensando...`,
     moveFailed: 'Falló la jugada. Intenta de nuevo.',
+    copiedPgn: 'PGN copiado al portapapeles.',
+    downloadedPgnText: 'Portapapeles no disponible. PGN descargado.',
+    copyPgnFailed: (msg) => `No se pudo copiar PGN: ${msg}`,
     copiedPng: 'PNG del tablero copiado al portapapeles.',
     engineUnavailable: (msg) => `Endpoint de motores no disponible (${msg}). Usando lista local.`,
     failedInit: 'No se pudo inicializar chessboard3',
@@ -130,7 +142,10 @@ const TRANSLATIONS = {
     newGame: 'Novo jogo',
     undo: 'Desfazer',
     flip: 'Girar',
+    copyPgn: 'Copiar PGN',
+    downloadPgn: 'Baixar PGN',
     copyPng: 'Copiar PNG',
+    downloadPng: 'Baixar PNG',
     engineMoveNow: 'Lance do motor',
     statusLabel: 'Status',
     fen: 'FEN',
@@ -144,6 +159,9 @@ const TRANSLATIONS = {
     toMove: (side, check) => `${side} jogam${check ? ` (${check})` : ''}`,
     thinking: (engine) => `${engine} está pensando...`,
     moveFailed: 'Falha no lance. Tente novamente.',
+    copiedPgn: 'PGN copiado para a area de transferencia.',
+    downloadedPgnText: 'Area de transferencia indisponivel. PGN baixado.',
+    copyPgnFailed: (msg) => `Nao foi possivel copiar PGN: ${msg}`,
     copiedPng: 'PNG do tabuleiro copiado para a area de transferencia.',
     engineUnavailable: (msg) => `Endpoint de motores indisponivel (${msg}). Usando lista local.`,
     failedInit: 'Falha ao inicializar chessboard3',
@@ -177,7 +195,10 @@ const TRANSLATIONS = {
     newGame: 'Nuova partita',
     undo: 'Annulla',
     flip: 'Ruota',
+    copyPgn: 'Copia PGN',
+    downloadPgn: 'Scarica PGN',
     copyPng: 'Copia PNG',
+    downloadPng: 'Scarica PNG',
     engineMoveNow: 'Mossa motore',
     statusLabel: 'Stato',
     fen: 'FEN',
@@ -191,6 +212,9 @@ const TRANSLATIONS = {
     toMove: (side, check) => `Tocca a ${side}${check ? ` (${check})` : ''}`,
     thinking: (engine) => `${engine} sta pensando...`,
     moveFailed: 'Mossa non riuscita. Riprova.',
+    copiedPgn: 'PGN copiato negli appunti.',
+    downloadedPgnText: 'Appunti non disponibili. PGN scaricato.',
+    copyPgnFailed: (msg) => `Impossibile copiare PGN: ${msg}`,
     copiedPng: 'PNG della scacchiera copiato negli appunti.',
     engineUnavailable: (msg) => `Endpoint motori non disponibile (${msg}). Uso lista locale.`,
     failedInit: 'Impossibile inizializzare chessboard3',
@@ -702,35 +726,13 @@ export default function App() {
     }
   }
 
-  async function canvasToPngBlob(canvas) {
-    try {
-      const blob = await new Promise((resolve) => {
-        canvas.toBlob((result) => resolve(result), 'image/png')
-      })
-      if (blob) {
-        return blob
-      }
-    } catch (err) {
-      if (err?.name === 'SecurityError') {
-        throw new Error(tt().taintedCanvas)
-      }
-      throw err
-    }
-
-    // Fallback path for browsers where toBlob can fail on WebGL canvases.
-    try {
-      const dataUrl = canvas.toDataURL('image/png')
-      const res = await fetch(dataUrl)
-      return await res.blob()
-    } catch (err) {
-      if (err?.name === 'SecurityError') {
-        throw new Error(tt().taintedCanvas)
-      }
-      throw new Error(tt().pngFailed)
-    }
+  function buildPgnText() {
+    const pgn = gameRef.current.pgn({ maxWidth: 100, newline: '\n' }).trim()
+    return pgn || '*'
   }
 
-  function downloadPng(blob, filename) {
+  function downloadTextFile(content, filename, mimeType = 'text/plain;charset=utf-8') {
+    const blob = new Blob([content], { type: mimeType })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -741,57 +743,57 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
-  async function copyBoardPngToClipboard() {
+  async function downloadPgnFile() {
+    setError('')
+    try {
+      const pgn = buildPgnText()
+      downloadTextFile(pgn, 'chess3d-game.pgn', 'application/x-chess-pgn;charset=utf-8')
+      setStatus(tt().downloadedPgnText)
+    } catch (err) {
+      setError(tt().copyPgnFailed(err?.message || tt().clipboardSecure))
+    }
+  }
+
+  async function copyPgnToClipboard() {
     setError('')
 
     try {
-      const boardHost = document.getElementById(BOARD_CONTAINER_ID)
-      const canvas = boardHost?.querySelector('canvas')
-      if (!canvas) {
-        throw new Error(tt().canvasNotFound)
-      }
-
-      const blob = await canvasToPngBlob(canvas)
-      const ClipboardItemCtor = window.ClipboardItem
       const canCopy =
         window.isSecureContext
         && !!navigator.clipboard
-        && typeof navigator.clipboard.write === 'function'
-        && typeof ClipboardItemCtor === 'function'
+        && typeof navigator.clipboard.writeText === 'function'
       const canVerifyClipboard =
         window.isSecureContext
         && !!navigator.clipboard
-        && typeof navigator.clipboard.read === 'function'
+        && typeof navigator.clipboard.readText === 'function'
+      const pgn = buildPgnText()
 
       if (canCopy) {
         try {
-          await navigator.clipboard.write([
-            new ClipboardItemCtor({
-              'image/png': blob,
-            }),
-          ])
+          await navigator.clipboard.writeText(pgn)
 
           if (canVerifyClipboard) {
-            const items = await navigator.clipboard.read()
-            const hasPng = items.some((item) => item.types.includes('image/png'))
-            if (hasPng) {
-              setStatus(tt().copiedPng)
-              return
+            const text = await navigator.clipboard.readText()
+            const normalizedExpected = pgn.replace(/\r\n/g, '\n').trim()
+            const normalizedActual = (text || '').replace(/\r\n/g, '\n').trim()
+            if (!normalizedActual || !normalizedExpected.startsWith(normalizedActual.slice(0, 20))) {
+              throw new Error(tt().clipboardSecure)
             }
+            setStatus(tt().copiedPgn)
+            return
           } else {
-            downloadPng(blob, 'chess3d-board.png')
-            setStatus(tt().verifyClipboardUnavailable)
+            setStatus(tt().copiedPgn)
             return
           }
         } catch {
-          // Fall through to file download.
+          // Fall through to file download when clipboard copy is blocked/incompatible.
         }
       }
 
-      downloadPng(blob, 'chess3d-board.png')
-      setStatus(tt().downloadedPng)
+      downloadTextFile(pgn, 'chess3d-game.pgn', 'application/x-chess-pgn;charset=utf-8')
+      setStatus(tt().downloadedPgnText)
     } catch (err) {
-      setError(tt().copyFailed(err?.message || tt().clipboardSecure))
+      setError(tt().copyPgnFailed(err?.message || tt().clipboardSecure))
     }
   }
 
@@ -856,7 +858,8 @@ export default function App() {
               <button type="button" onClick={() => startNewGame()}>{t.newGame}</button>
               <button type="button" onClick={undoLastMove}>{t.undo}</button>
               <button type="button" onClick={flipBoard}>{t.flip}</button>
-              <button type="button" onClick={copyBoardPngToClipboard}>{t.copyPng}</button>
+              <button type="button" onClick={copyPgnToClipboard}>{t.copyPgn}</button>
+              <button type="button" onClick={downloadPgnFile}>{t.downloadPgn}</button>
               <button type="button" onClick={requestEngineMove} disabled={isThinking || gameRef.current.turn() === playerColor}>
                 {t.engineMoveNow}
               </button>
