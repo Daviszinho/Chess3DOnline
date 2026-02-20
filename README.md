@@ -75,6 +75,9 @@ http://<IP_DE_TU_PC>:5173
 npm run dev
 npm run build
 npm run preview
+npm run test
+npm run coverage
+npm run security:zap
 ```
 
 ## Deploy en Azure Free
@@ -115,3 +118,73 @@ Si el repo ya existe:
 ```bash
 git push -u origin main
 ```
+
+## Seguridad (OWASP ZAP)
+
+Escaneo baseline automatizado con OWASP ZAP para detectar alertas de seguridad en la app publicada localmente.
+
+### Remediaciones aplicadas
+
+Se agregaron cabeceras de seguridad para mitigar hallazgos de ZAP:
+
+- `Content-Security-Policy`
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+
+Archivos donde se configuran:
+
+- `vite.config.js` (desarrollo local y `vite preview`)
+- `public/staticwebapp.config.json` (Azure Static Web Apps)
+- `scripts/secure-preview.mjs` (servidor local para escaneo ZAP)
+
+Directivas CSP activas (resumen):
+
+- `default-src 'self'`
+- `form-action 'self'`
+- `frame-ancestors 'none'` (anti-clickjacking moderno)
+- `script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com`
+- `style-src 'self'` (sin `unsafe-inline`)
+- `connect-src 'self' https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io`
+
+Requisitos locales:
+
+- Docker
+- curl
+
+Ejecucion local:
+
+```bash
+npm run security:zap
+```
+
+Reportes generados en:
+
+- `zap-reports/zap-report.html`
+- `zap-reports/zap-report.json`
+- `zap-reports/zap-report.md`
+
+Variables opcionales:
+
+- `ZAP_PORT` (default: `4173`)
+- `ZAP_TARGET_URL` (default: `http://127.0.0.1:<PORT>`)
+- `ZAP_REPORT_DIR` (default: `zap-reports`)
+- `ZAP_IMAGE` (default: `ghcr.io/zaproxy/zaproxy:stable`)
+
+CI:
+
+- Workflow: `.github/workflows/security-zap.yml`
+- Se ejecuta en `push` y `pull_request` a `main`.
+
+Verificacion recomendada:
+
+1. Ejecutar `npm run security:zap`.
+2. Abrir `zap-reports/zap-report.html`.
+3. Confirmar que ya no aparezcan:
+- `Content Security Policy (CSP) Header Not Set`
+- `Missing Anti-clickjacking Header`
+
+Nota de despliegue:
+
+- En **Azure Static Web Apps**, aplica `public/staticwebapp.config.json`.
+- En **Azure App Service**, debes configurar estos headers en servidor/proxy de App Service tambien.

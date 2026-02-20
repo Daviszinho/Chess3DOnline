@@ -9,7 +9,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "security:zap": "./scripts/zap-baseline.sh"
   },
   "dependencies": {
     "chess.js": "^1.4.0",
@@ -17,7 +21,12 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^4.4.1",
-    "vite": "^5.4.10"
+    "@vitest/coverage-v8": "^4.0.18",
+    "jsdom": "^28.1.0",
+    "vite": "^5.4.10",
+    "vitest": "^4.0.18"
   }
 }
