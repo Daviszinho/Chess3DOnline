@@ -174,7 +174,7 @@ Variables opcionales:
 CI:
 
 - Workflow: `.github/workflows/security-zap.yml`
-- Se ejecuta en `push` y `pull_request` a `main`.
+- Se ejecuta solo manualmente (`workflow_dispatch`).
 
 Verificacion recomendada:
 
