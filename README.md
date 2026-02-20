@@ -9,88 +9,58 @@ Cliente web **Vite + React** para jugar ajedrez 3D contra motores de ajedrez usa
   - `GET /api/engines`
   - `GET /api/health`
   - `POST /api/move`
-- Seleccion de motor (Stockfish, Crafty, etc.) y nivel (`1-20`).
+- Seleccion de motor y nivel (`1-20`).
 - Jugar como blancas o negras.
-- Soporte de reglas especiales:
+- Reglas especiales soportadas:
   - enroque
   - en passant
   - promocion de peon con seleccion de pieza (`dama`, `torre`, `alfil`, `caballo`)
-- Undo completo (deshace turno completo: jugador + motor cuando aplica).
-- FEN editable: al cambiar un FEN valido se recarga posicion y estado.
-- Historial de jugadas en tabla por turnos (columna blancas/negras).
+- Undo completo (deshace turno completo cuando aplica).
+- FEN editable con recarga de posicion.
+- Historial de jugadas en tabla (blancas / negras).
 - Exportar tablero como PNG al portapapeles.
-- Selector de temas del tablero:
+- Temas de tablero:
   - cafe / crema
   - blanco / gris
   - celeste / azul
   - amarillo claro / verde
-- Interfaz multilenguaje:
-  - ingles
-  - espanol
-  - portugues
-  - italiano
-- PWA:
-  - `manifest.webmanifest`
-  - service worker (`public/sw.js`)
-  - instalable en navegador compatible
-- Soporte LAN para abrir desde otra laptop (host `0.0.0.0`).
+- Multilenguaje: ingles, espanol, portugues, italiano.
+- PWA (manifest + service worker).
 
 ## Stack
 
 - React 18
 - Vite 5
 - chess.js
-- chessboard3.js (cargado por CDN)
+- chessboard3.js (CDN)
 
 ## Requisitos
 
-- Node.js 18+
+- Node.js **22.x**
 - npm
 - Navegador con WebGL habilitado
 
-## Configuracion
+## Variables de entorno
 
-1. Copia variables de entorno:
+Este proyecto ya viene preparado para Azure:
 
-```bash
-cp .env.example .env
-```
+- Desarrollo local: `.env.development` usa `VITE_CHESS_API_BASE=/api` (proxy Vite).
+- Produccion: `.env.production` usa la URL publica del backend.
 
-2. Instala dependencias:
+Ejemplo base: `.env.example`
+
+## Desarrollo local
 
 ```bash
 npm install
-```
-
-3. Ejecuta en desarrollo:
-
-```bash
 npm run dev
 ```
 
-El servidor Vite levanta en `0.0.0.0:5173`.
-
-## Acceso desde otra laptop
-
-Abre en otra maquina del mismo laboratorio/red:
+Acceso en red local:
 
 ```text
 http://<IP_DE_TU_PC>:5173
 ```
-
-Si usas firewall:
-
-```bash
-sudo ufw allow 5173/tcp
-```
-
-## API / Proxy
-
-Por defecto el frontend usa `VITE_CHESS_API_BASE=/api` y Vite hace proxy a:
-
-`https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io`
-
-Puedes sobreescribir `VITE_CHESS_API_BASE` en `.env`.
 
 ## Scripts
 
@@ -100,20 +70,29 @@ npm run build
 npm run preview
 ```
 
-## PWA (prueba local)
+## Deploy en Azure Free (recomendado: Static Web Apps)
 
-```bash
-npm run build
-npm run preview -- --host 0.0.0.0 --port 4173
-```
+Esta app es frontend estatico, por lo que **Azure Static Web Apps Free** es la opcion mas directa.
 
-Luego abre:
+1. Sube el repo a GitHub (`daviszinho/Chess3DOnline`).
+2. En Azure Portal crea un recurso **Static Web App** (plan Free).
+3. Conecta el repositorio y rama `main`.
+4. Configura build:
 
-```text
-http://<IP_DE_TU_PC>:4173
-```
+- App location: `/`
+- Output location: `dist`
+- Build command: `npm run build`
 
-Instala la app desde el navegador (si el navegador lo permite).
+5. En Configuration agrega:
+
+- `NODE_VERSION=22`
+
+El archivo `public/staticwebapp.config.json` ya esta incluido para fallback SPA y headers.
+
+## Deploy alternativo en App Service Free (B1/F1)
+
+Si prefieres App Service, publica el contenido de `dist/` como sitio estatico.
+Aun asi, para este proyecto es mas simple y barato usar Static Web Apps Free.
 
 ## Publicar en GitHub
 
@@ -121,7 +100,7 @@ Repositorio objetivo:
 
 `https://github.com/daviszinho/Chess3DOnline`
 
-Comandos (si el repo ya existe en GitHub):
+Si el repo ya existe:
 
 ```bash
 git push -u origin main

@@ -1,0 +1,12 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/assets/*", "/*.js", "/*.css", "/*.png", "/*.svg", "/api/*"]
+  },
+  "mimeTypes": {
+    ".webmanifest": "application/manifest+json"
+  },
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff"
+  }
+}

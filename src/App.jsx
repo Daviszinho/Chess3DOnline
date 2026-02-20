@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chess } from 'chess.js'
 import { ensureChessboard3Loaded } from './lib/loadChessboard3'
 
-const API_BASE = (import.meta.env.VITE_CHESS_API_BASE || '/api').replace(/\/$/, '')
+const API_BASE = (
+  import.meta.env.VITE_CHESS_API_BASE
+  || (import.meta.env.DEV
+    ? '/api'
+    : 'https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io/api')
+).replace(/\/$/, '')
 const BOARD_CONTAINER_ID = 'chessboard3-root'
 const FALLBACK_ENGINES = ['stockfish', 'gnuchess', 'fruit', 'toga2', 'phalanx', 'crafty', 'glaurung']
 const BOARD_THEMES = {
