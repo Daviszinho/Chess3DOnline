@@ -200,11 +200,78 @@ code {
 }
 
 @media (max-width: 1024px) {
+  .app {
+    padding: 14px;
+  }
+
   .layout {
     grid-template-columns: 1fr;
   }
 
   .board-host {
-    min-height: 420px;
+    min-height: min(62vh, 460px);
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    justify-items: center;
+  }
+
+  .health {
+    justify-self: center;
+  }
+
+  .topbar h1 {
+    font-size: 1.2rem;
+  }
+
+  .board-panel,
+  .side-panel {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .board-host {
+    min-height: min(56vh, 380px);
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+
+  .moves-table {
+    font-size: 0.84rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app {
+    padding: 10px;
+  }
+
+  .topbar h1 {
+    font-size: 1.05rem;
+  }
+
+  .board-host {
+    min-height: min(50vh, 320px);
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .moves-table th,
+  .moves-table td {
+    padding: 6px 8px;
   }
 }
