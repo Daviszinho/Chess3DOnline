@@ -859,7 +859,6 @@ export default function App() {
               <button type="button" onClick={undoLastMove}>{t.undo}</button>
               <button type="button" onClick={flipBoard}>{t.flip}</button>
               <button type="button" onClick={copyPgnToClipboard}>{t.copyPgn}</button>
-              <button type="button" onClick={downloadPgnFile}>{t.downloadPgn}</button>
               <button type="button" onClick={requestEngineMove} disabled={isThinking || gameRef.current.turn() === playerColor}>
                 {t.engineMoveNow}
               </button>
