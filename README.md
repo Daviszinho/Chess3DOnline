@@ -1,11 +1,51 @@
-# Chess3D Client (Vite + React)
+# Chess3DOnline
 
-Cliente web para `Chess Engine API`, usando `chessboard3.js` para el tablero 3D.
+Cliente web **Vite + React** para jugar ajedrez 3D contra motores de ajedrez usando **Chess Engine API**.
+
+## Caracteristicas
+
+- Tablero 3D con `chessboard3.js`.
+- Integracion con API de motores:
+  - `GET /api/engines`
+  - `GET /api/health`
+  - `POST /api/move`
+- Seleccion de motor (Stockfish, Crafty, etc.) y nivel (`1-20`).
+- Jugar como blancas o negras.
+- Soporte de reglas especiales:
+  - enroque
+  - en passant
+  - promocion de peon con seleccion de pieza (`dama`, `torre`, `alfil`, `caballo`)
+- Undo completo (deshace turno completo: jugador + motor cuando aplica).
+- FEN editable: al cambiar un FEN valido se recarga posicion y estado.
+- Historial de jugadas en tabla por turnos (columna blancas/negras).
+- Exportar tablero como PNG al portapapeles.
+- Selector de temas del tablero:
+  - cafe / crema
+  - blanco / gris
+  - celeste / azul
+  - amarillo claro / verde
+- Interfaz multilenguaje:
+  - ingles
+  - espanol
+  - portugues
+  - italiano
+- PWA:
+  - `manifest.webmanifest`
+  - service worker (`public/sw.js`)
+  - instalable en navegador compatible
+- Soporte LAN para abrir desde otra laptop (host `0.0.0.0`).
+
+## Stack
+
+- React 18
+- Vite 5
+- chess.js
+- chessboard3.js (cargado por CDN)
 
 ## Requisitos
 
 - Node.js 18+
-- NPM
+- npm
 - Navegador con WebGL habilitado
 
 ## Configuracion
@@ -28,34 +68,61 @@ npm install
 npm run dev
 ```
 
-El servidor de Vite levanta en `0.0.0.0:5173` y usa proxy local:
+El servidor Vite levanta en `0.0.0.0:5173`.
 
-- Frontend: `http://<IP_DE_TU_PC>:5173`
-- API desde frontend: `/api/*` (redirigido a `https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io/api/*`)
+## Acceso desde otra laptop
 
-## API utilizada
+Abre en otra maquina del mismo laboratorio/red:
 
-- `GET /engines`
-- `GET /health`
-- `POST /move`
+```text
+http://<IP_DE_TU_PC>:5173
+```
 
-Base URL por defecto: `/api` (via proxy de Vite).
+Si usas firewall:
 
-Se puede sobreescribir con `VITE_CHESS_API_BASE`.
+```bash
+sudo ufw allow 5173/tcp
+```
 
-## PWA
+## API / Proxy
 
-La app ya incluye:
+Por defecto el frontend usa `VITE_CHESS_API_BASE=/api` y Vite hace proxy a:
 
-- `manifest.webmanifest`
-- `service worker` (`public/sw.js`)
-- Iconos en `public/icons/`
+`https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io`
 
-Para probar instalacion y cache offline usa build de produccion:
+Puedes sobreescribir `VITE_CHESS_API_BASE` en `.env`.
+
+## Scripts
+
+```bash
+npm run dev
+npm run build
+npm run preview
+```
+
+## PWA (prueba local)
 
 ```bash
 npm run build
 npm run preview -- --host 0.0.0.0 --port 4173
 ```
 
-Luego abre `http://<IP_DE_TU_PC>:4173`, instala la app desde el navegador y verifica en DevTools > Application > Service Workers.
+Luego abre:
+
+```text
+http://<IP_DE_TU_PC>:4173
+```
+
+Instala la app desde el navegador (si el navegador lo permite).
+
+## Publicar en GitHub
+
+Repositorio objetivo:
+
+`https://github.com/daviszinho/Chess3DOnline`
+
+Comandos (si el repo ya existe en GitHub):
+
+```bash
+git push -u origin main
+```
