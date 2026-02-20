@@ -58,6 +58,7 @@ const TRANSLATIONS = {
     pngFailed: 'Could not generate PNG from board.',
     copyFailed: (msg) => `Could not copy PNG: ${msg}`,
     downloadedPng: 'Clipboard not available. PNG downloaded.',
+    verifyClipboardUnavailable: 'Clipboard verification unavailable. PNG downloaded.',
     taintedCanvas: 'Canvas cannot be exported due to external assets (CORS).',
     engineRequestFailed: (msg) => `Engine request failed: ${msg}`,
     invalidEngineMove: 'Engine response does not contain a move',
@@ -104,6 +105,7 @@ const TRANSLATIONS = {
     pngFailed: 'No se pudo generar el PNG del tablero.',
     copyFailed: (msg) => `No se pudo copiar PNG: ${msg}`,
     downloadedPng: 'Portapapeles no disponible. PNG descargado.',
+    verifyClipboardUnavailable: 'No se puede verificar portapapeles. PNG descargado.',
     taintedCanvas: 'No se puede exportar el canvas por recursos externos (CORS).',
     engineRequestFailed: (msg) => `Falló la petición al motor: ${msg}`,
     invalidEngineMove: 'La respuesta del motor no contiene jugada',
@@ -150,6 +152,7 @@ const TRANSLATIONS = {
     pngFailed: 'Nao foi possivel gerar PNG do tabuleiro.',
     copyFailed: (msg) => `Nao foi possivel copiar PNG: ${msg}`,
     downloadedPng: 'Area de transferencia indisponivel. PNG baixado.',
+    verifyClipboardUnavailable: 'Nao foi possivel verificar a area de transferencia. PNG baixado.',
     taintedCanvas: 'Nao foi possivel exportar o canvas por recursos externos (CORS).',
     engineRequestFailed: (msg) => `Falha na requisicao do motor: ${msg}`,
     invalidEngineMove: 'Resposta do motor sem jogada',
@@ -196,6 +199,7 @@ const TRANSLATIONS = {
     pngFailed: 'Impossibile generare PNG della scacchiera.',
     copyFailed: (msg) => `Impossibile copiare PNG: ${msg}`,
     downloadedPng: 'Appunti non disponibili. PNG scaricato.',
+    verifyClipboardUnavailable: 'Impossibile verificare appunti. PNG scaricato.',
     taintedCanvas: 'Impossibile esportare il canvas per risorse esterne (CORS).',
     engineRequestFailed: (msg) => `Richiesta al motore fallita: ${msg}`,
     invalidEngineMove: 'Risposta del motore senza mossa',
@@ -754,6 +758,10 @@ export default function App() {
         && !!navigator.clipboard
         && typeof navigator.clipboard.write === 'function'
         && typeof ClipboardItemCtor === 'function'
+      const canVerifyClipboard =
+        window.isSecureContext
+        && !!navigator.clipboard
+        && typeof navigator.clipboard.read === 'function'
 
       if (canCopy) {
         try {
@@ -762,8 +770,19 @@ export default function App() {
               'image/png': blob,
             }),
           ])
-          setStatus(tt().copiedPng)
-          return
+
+          if (canVerifyClipboard) {
+            const items = await navigator.clipboard.read()
+            const hasPng = items.some((item) => item.types.includes('image/png'))
+            if (hasPng) {
+              setStatus(tt().copiedPng)
+              return
+            }
+          } else {
+            downloadPng(blob, 'chess3d-board.png')
+            setStatus(tt().verifyClipboardUnavailable)
+            return
+          }
         } catch {
           // Fall through to file download.
         }
