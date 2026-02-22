@@ -802,7 +802,9 @@ export default function App() {
       <header className="topbar">
         <div />
         <h1>{t.title}</h1>
-        <div className={`health health-${health}`}>{t.health}: {health}</div>
+        {health !== 'ok' && health !== 'unknown' && (
+          <div className={`health health-${health}`}>{t.health}: {health}</div>
+        )}
       </header>
 
       <main className="layout">
