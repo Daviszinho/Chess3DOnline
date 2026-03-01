@@ -171,6 +171,22 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /Engine move now/i })).toBeDisabled()
   })
 
+  it('falls back to flip and allows black move when fen URL turn is black', async () => {
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/P7/1PPPPPPP/RNBQKBNR b KQkq - 0 1'
+    window.history.replaceState({}, '', `/?fen=${encodeURIComponent(fen)}`)
+
+    render(<App />)
+
+    await screen.findByLabelText(/FEN/i)
+
+    expect(await screen.findByText(/Black to move/i)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Play as/i })).toHaveValue('b')
+    expect(boardInstance.flip).toHaveBeenCalled()
+
+    const dropResult = boardInstance.options.onDrop('a7', 'a6', null, null, {})
+    expect(dropResult).toBeUndefined()
+  })
+
   it('keeps fen in URL when position changes', async () => {
     const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
 

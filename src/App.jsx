@@ -652,8 +652,13 @@ export default function App() {
     if (typeof board.orientation === 'function') {
       try {
         board.orientation(desired)
-        boardOrientationRef.current = desired
-        return
+        const current = board.orientation()
+        if (current === 'white' || current === 'black') {
+          boardOrientationRef.current = current
+          if (current === desired) {
+            return
+          }
+        }
       } catch {
         // Fallback to flip if this build does not support orientation().
       }
@@ -848,6 +853,7 @@ export default function App() {
   function flipBoard() {
     if (boardRef.current) {
       boardRef.current.flip()
+      boardOrientationRef.current = boardOrientationRef.current === 'white' ? 'black' : 'white'
     }
   }
 
