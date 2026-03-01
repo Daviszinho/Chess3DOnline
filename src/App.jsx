@@ -352,6 +352,13 @@ export default function App() {
     playerColorRef.current = playerColor
   }, [playerColor])
 
+  // Sync playerColor with FEN when loading from URL
+  useEffect(() => {
+    if (initialFenRef.current && initialFenRef.current !== '') {
+      setPlayerColor(playerColorRef.current)
+    }
+  }, [initialFenRef.current])
+
   useEffect(() => {
     boardThemeRef.current = boardTheme
     syncBoardWithGame()
