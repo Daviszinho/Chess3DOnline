@@ -302,6 +302,7 @@ export default function App() {
       const tempGame = new Chess()
       if (safelyLoadFen(tempGame, fenFromUrl)) {
         gameRef.current.load(tempGame.fen())
+        playerColorRef.current = tempGame.turn()
         initialFenRef.current = tempGame.fen()
       } else {
         initialFenRef.current = ''
@@ -315,7 +316,7 @@ export default function App() {
   const [engines, setEngines] = useState([])
   const [selectedEngine, setSelectedEngine] = useState('stockfish')
   const [level, setLevel] = useState(5)
-  const [playerColor, setPlayerColor] = useState('w')
+  const [playerColor, setPlayerColor] = useState(playerColorRef.current)
   const [boardTheme, setBoardTheme] = useState('brownCream')
   const [language, setLanguage] = useState('en')
   const [status, setStatus] = useState(TRANSLATIONS.en.loadingBoard)

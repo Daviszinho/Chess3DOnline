@@ -166,6 +166,9 @@ describe('App', () => {
     const fenInput = await screen.findByLabelText(/FEN/i)
     expect(fenInput).toHaveValue(fen)
     expect(boardInstance.position).toHaveBeenCalledWith(fen, false)
+    expect(boardInstance.orientation).toHaveBeenCalledWith('black')
+    expect(screen.getByRole('combobox', { name: /Play as/i })).toHaveValue('b')
+    expect(screen.getByRole('button', { name: /Engine move now/i })).toBeDisabled()
   })
 
   it('keeps fen in URL when position changes', async () => {
