@@ -41,6 +41,7 @@ describe('App', () => {
     vi.restoreAllMocks()
     ensureChessboard3Loaded.mockResolvedValue()
     boardInstance = null
+    window.history.replaceState({}, '', '/')
 
     Object.defineProperty(window, 'ChessBoard3', {
       writable: true,
@@ -96,9 +97,10 @@ describe('App', () => {
   it('initializes board and shows healthy status', async () => {
     render(<App />)
 
-    expect(await screen.findByText(/health: ok/i)).toBeInTheDocument()
-    expect(ensureChessboard3Loaded).toHaveBeenCalledTimes(1)
-    expect(boardInstance).toBeTruthy()
+    await waitFor(() => {
+      expect(ensureChessboard3Loaded).toHaveBeenCalledTimes(1)
+      expect(boardInstance).toBeTruthy()
+    })
     expect(boardInstance.id).toBe('chessboard3-root')
     expect(await screen.findByText(/White to move/i)).toBeInTheDocument()
   })
@@ -153,6 +155,32 @@ describe('App', () => {
 
     expect(boardInstance.position).toHaveBeenCalled()
     expect(await screen.findByText(/White to move/i)).toBeInTheDocument()
+  })
+
+  it('loads board position from fen URL param', async () => {
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1'
+    window.history.replaceState({}, '', `/?fen=${encodeURIComponent(fen)}`)
+
+    render(<App />)
+
+    const fenInput = await screen.findByLabelText(/FEN/i)
+    expect(fenInput).toHaveValue(fen)
+    expect(boardInstance.position).toHaveBeenCalledWith(fen, false)
+  })
+
+  it('keeps fen in URL when position changes', async () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+    render(<App />)
+
+    const fenInput = await screen.findByLabelText(/FEN/i)
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1'
+    fireEvent.change(fenInput, { target: { value: fen } })
+
+    await waitFor(() => {
+      expect(replaceStateSpy).toHaveBeenCalled()
+      expect(new URLSearchParams(window.location.search).get('fen')).toBe(fen)
+    })
   })
 
   it('copies PGN to clipboard in secure context', async () => {

@@ -17,6 +17,7 @@ const BOARD_THEMES = {
   yellowGreen: { light: 0xfef08a, dark: 0x65a30d },
 }
 const SUPPORTED_LANGS = ['en', 'es', 'pt', 'it']
+const URL_FEN_PARAM = 'fen'
 const TRANSLATIONS = {
   en: {
     title: 'Chess 3D Online',
@@ -243,6 +244,37 @@ function parseUciMove(move) {
   }
 }
 
+function getFenFromUrl() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  const params = new URLSearchParams(window.location.search)
+  return params.get(URL_FEN_PARAM) || params.get('position')
+}
+
+function updateFenUrl(fen) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  const url = new URL(window.location.href)
+  url.searchParams.set(URL_FEN_PARAM, fen)
+  url.searchParams.delete('position')
+  try {
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  } catch {
+    // Ignore history API restrictions (e.g. file:// or embedded contexts).
+  }
+}
+
+function safelyLoadFen(game, fen) {
+  try {
+    game.load(fen)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function isDarkSquare(square) {
   const file = square.charCodeAt(0) - 97 // a=0 ... h=7
   const rank = Number(square[1]) // 1 ... 8
@@ -262,6 +294,22 @@ export default function App() {
   const levelRef = useRef(5)
   const languageRef = useRef('en')
   const boardThemeRef = useRef('brownCream')
+  const initialFenRef = useRef(null)
+
+  if (initialFenRef.current === null) {
+    const fenFromUrl = getFenFromUrl()
+    if (fenFromUrl) {
+      const tempGame = new Chess()
+      if (safelyLoadFen(tempGame, fenFromUrl)) {
+        gameRef.current.load(tempGame.fen())
+        initialFenRef.current = tempGame.fen()
+      } else {
+        initialFenRef.current = ''
+      }
+    } else {
+      initialFenRef.current = ''
+    }
+  }
 
   const [ready, setReady] = useState(false)
   const [engines, setEngines] = useState([])
@@ -329,7 +377,7 @@ export default function App() {
         return
       }
 
-      const loaded = gameRef.current.load(nextFen)
+      const loaded = safelyLoadFen(gameRef.current, nextFen)
       if (!loaded) {
         setFenError(tt().invalidFen)
         return
@@ -344,7 +392,7 @@ export default function App() {
       if (boardRef.current) {
         boardRef.current.position(gameRef.current.fen(), false)
       }
-      setFenInput(gameRef.current.fen())
+      syncFenState()
       refreshBoardStatus()
     }, 350)
 
@@ -355,6 +403,14 @@ export default function App() {
 
   function tt() {
     return TRANSLATIONS[languageRef.current] || TRANSLATIONS.en
+  }
+
+  function syncFenState(syncUrl = true) {
+    const fen = gameRef.current.fen()
+    setFenInput(fen)
+    if (syncUrl) {
+      updateFenUrl(fen)
+    }
   }
 
   function syncBoardWithGame() {
@@ -498,7 +554,14 @@ export default function App() {
 
         boardInitRef.current = true
         setReady(true)
-        startNewGame(playerColorRef.current)
+        if (initialFenRef.current) {
+          syncBoardWithGame()
+          applyOrientation(playerColorRef.current)
+          syncFenState()
+          refreshBoardStatus()
+        } else {
+          startNewGame(playerColorRef.current, false)
+        }
       } catch (err) {
         setError(err.message || tt().failedInit)
       }
@@ -601,7 +664,7 @@ export default function App() {
     }
   }
 
-  function startNewGame(color = playerColorRef.current) {
+  function startNewGame(color = playerColorRef.current, syncUrl = true) {
     playerColorRef.current = color
     setPlayerColor(color)
     gameRef.current.reset()
@@ -616,7 +679,7 @@ export default function App() {
       applyOrientation(color)
     }
 
-    setFenInput(gameRef.current.fen())
+    syncFenState(syncUrl)
     refreshBoardStatus()
 
     if (color === 'b') {
@@ -650,7 +713,7 @@ export default function App() {
     }
 
     setMoves((prev) => [...prev, { color: move.color, san: move.san }])
-    setFenInput(gameRef.current.fen())
+    syncFenState()
     playPieceMoveSound()
     refreshBoardStatus()
 
@@ -754,7 +817,7 @@ export default function App() {
 
     syncBoardWithGame()
     setMoves((prev) => [...prev, { color: move.color, san: sanFromApi || move.san }])
-    setFenInput(gameRef.current.fen())
+    syncFenState()
     playPieceMoveSound()
   }
 
@@ -777,7 +840,7 @@ export default function App() {
     thinkingRef.current = false
     setMoves((prev) => prev.slice(0, Math.max(0, prev.length - undoneCount)))
     syncBoardWithGame()
-    setFenInput(gameRef.current.fen())
+    syncFenState()
     refreshBoardStatus()
   }
 

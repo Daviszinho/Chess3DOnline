@@ -1,30 +1,47 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const SECURITY_HEADERS = {
-  'Content-Security-Policy': [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-    "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
-    "style-src 'self'",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io ws: wss:",
-  ].join('; '),
-  'X-Frame-Options': 'DENY',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
+const BASE_CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io https://cdn.jsdelivr.net https://cdnjs.cloudflare.com ws: wss:",
+]
+
+const DEV_CSP = [
+  ...BASE_CSP_DIRECTIVES,
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline'",
+].join('; ')
+
+const STRICT_CSP = [
+  ...BASE_CSP_DIRECTIVES,
+  "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "style-src 'self'",
+].join('; ')
+
+function createSecurityHeaders(csp) {
+  return {
+    'Content-Security-Policy': csp,
+    'X-Frame-Options': 'DENY',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  }
 }
+
+const DEV_SECURITY_HEADERS = createSecurityHeaders(DEV_CSP)
+const STRICT_SECURITY_HEADERS = createSecurityHeaders(STRICT_CSP)
 
 export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
     port: 5173,
-    headers: SECURITY_HEADERS,
+    headers: DEV_SECURITY_HEADERS,
     proxy: {
       '/api': {
         target: 'https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io',
@@ -34,7 +51,7 @@ export default defineConfig({
     },
   },
   preview: {
-    headers: SECURITY_HEADERS,
+    headers: STRICT_SECURITY_HEADERS,
   },
   test: {
     environment: 'jsdom',
