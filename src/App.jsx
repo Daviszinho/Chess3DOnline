@@ -939,7 +939,10 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div />
-        <h1>{t.title}</h1>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center' }}>
+          <img src="/icons/icon-192.svg" alt="Logo" style={{ width: '32px', height: '32px' }} />
+          {t.title}
+        </h1>
         {health !== 'ok' && health !== 'unknown' && (
           <div className={`health health-${health}`}>{t.health}: {health}</div>
         )}
