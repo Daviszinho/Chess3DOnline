@@ -25,6 +25,11 @@ const TRANSLATIONS = {
     loadingBoard: 'Loading board...',
     engine: 'Engine',
     level: 'Level',
+    levelBeginner: 'Beginner',
+    levelCasual: 'Casual',
+    levelIntermediate: 'Intermediate',
+    levelAdvanced: 'Advanced',
+    levelMax: 'Maximum strength',
     language: 'Language',
     playAs: 'Play as',
     boardTheme: 'Board theme',
@@ -78,8 +83,12 @@ const TRANSLATIONS = {
     loadingBoard: 'Cargando tablero...',
     engine: 'Motor',
     level: 'Nivel',
+    levelBeginner: 'Principiante',
+    levelCasual: 'Casual',
+    levelIntermediate: 'Intermedio',
+    levelAdvanced: 'Avanzado',
+    levelMax: 'Fuerza máxima',
     language: 'Idioma',
-    playAs: 'Jugar como',
     boardTheme: 'Tema del tablero',
     themeBrownCream: 'Cafe / Crema',
     themeWhiteGray: 'Blanco / Gris',
@@ -131,6 +140,11 @@ const TRANSLATIONS = {
     loadingBoard: 'Carregando tabuleiro...',
     engine: 'Motor',
     level: 'Nivel',
+    levelBeginner: 'Iniciante',
+    levelCasual: 'Casual',
+    levelIntermediate: 'Intermediário',
+    levelAdvanced: 'Avançado',
+    levelMax: 'Força máxima',
     language: 'Idioma',
     playAs: 'Jogar como',
     boardTheme: 'Tema do tabuleiro',
@@ -184,6 +198,11 @@ const TRANSLATIONS = {
     loadingBoard: 'Caricamento scacchiera...',
     engine: 'Motore',
     level: 'Livello',
+    levelBeginner: 'Principiante',
+    levelCasual: 'Casuale',
+    levelIntermediate: 'Intermedio',
+    levelAdvanced: 'Avanzato',
+    levelMax: 'Forza massima',
     language: 'Lingua',
     playAs: 'Gioca come',
     boardTheme: 'Tema scacchiera',
@@ -279,6 +298,14 @@ function isDarkSquare(square) {
   const file = square.charCodeAt(0) - 97 // a=0 ... h=7
   const rank = Number(square[1]) // 1 ... 8
   return (file + rank) % 2 === 1
+}
+
+function getLevelProfile(level) {
+  if (level <= 4) return 'levelBeginner'
+  if (level <= 9) return 'levelCasual'
+  if (level <= 14) return 'levelIntermediate'
+  if (level <= 19) return 'levelAdvanced'
+  return 'levelMax'
 }
 
 export default function App() {
@@ -969,7 +996,7 @@ export default function App() {
             </label>
 
             <label>
-              {t.level}: {level}
+              {t.level}: {level} — {t[getLevelProfile(level)]}
               <input
                 type="range"
                 min="1"
