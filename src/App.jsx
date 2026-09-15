@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Chess } from 'chess.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ensureChessboard3Loaded } from './lib/loadChessboard3'
+import { readUrlParams, writeUrlParams } from './lib/urlParams'
+import { useChessAudio } from './hooks/useChessAudio'
+import { useChessEngine } from './hooks/useChessEngine'
+import { useChessGame } from './hooks/useChessGame'
+import { usePreferences } from './hooks/usePreferences'
+import { useMovesScroll } from './hooks/useMovesScroll'
+import { PromotionModal } from './components/PromotionModal'
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const API_BASE = (
   import.meta.env.VITE_CHESS_API_BASE
@@ -8,16 +16,20 @@ const API_BASE = (
     ? '/api'
     : 'https://chessengineapi.calmdesert-d6fcfdbe.centralus.azurecontainerapps.io/api')
 ).replace(/\/$/, '')
+
 const BOARD_CONTAINER_ID = 'chessboard3-root'
+
 const FALLBACK_ENGINES = ['stockfish', 'gnuchess', 'fruit', 'toga2', 'phalanx', 'crafty', 'glaurung']
+
 const BOARD_THEMES = {
   brownCream: { light: 0xf5deb3, dark: 0x8b5a2b },
-  whiteGray: { light: 0xf8fafc, dark: 0x6b7280 },
-  skyBlue: { light: 0x93c5fd, dark: 0x1d4ed8 },
-  yellowGreen: { light: 0xfef08a, dark: 0x65a30d },
+  whiteGray:  { light: 0xf8fafc, dark: 0x6b7280 },
+  skyBlue:    { light: 0x93c5fd, dark: 0x1d4ed8 },
+  yellowGreen:{ light: 0xfef08a, dark: 0x65a30d },
 }
-const SUPPORTED_LANGS = ['en', 'es', 'pt', 'it']
-const URL_FEN_PARAM = 'fen'
+
+// ─── Translations ─────────────────────────────────────────────────────────────
+
 const TRANSLATIONS = {
   en: {
     title: 'Chess 3D Online',
@@ -75,6 +87,8 @@ const TRANSLATIONS = {
     engineRequestFailed: (msg) => `Engine request failed: ${msg}`,
     invalidEngineMove: 'Engine response does not contain a move',
     promotionPrompt: 'Promotion piece? (q=Queen, r=Rook, b=Bishop, n=Knight)',
+    promotionTitle: 'Choose promotion piece',
+    promotionCancel: 'Cancel',
     invalidPromotion: 'Invalid promotion piece. Use q, r, b, or n.',
   },
   es: {
@@ -89,6 +103,7 @@ const TRANSLATIONS = {
     levelAdvanced: 'Avanzado',
     levelMax: 'Fuerza máxima',
     language: 'Idioma',
+    playAs: 'Jugar como',
     boardTheme: 'Tema del tablero',
     themeBrownCream: 'Cafe / Crema',
     themeWhiteGray: 'Blanco / Gris',
@@ -132,6 +147,8 @@ const TRANSLATIONS = {
     engineRequestFailed: (msg) => `Falló la petición al motor: ${msg}`,
     invalidEngineMove: 'La respuesta del motor no contiene jugada',
     promotionPrompt: 'Pieza de promocion? (q=dama, r=torre, b=alfil, n=caballo)',
+    promotionTitle: 'Elige pieza de promocion',
+    promotionCancel: 'Cancelar',
     invalidPromotion: 'Promocion invalida. Usa q, r, b o n.',
   },
   pt: {
@@ -190,6 +207,8 @@ const TRANSLATIONS = {
     engineRequestFailed: (msg) => `Falha na requisicao do motor: ${msg}`,
     invalidEngineMove: 'Resposta do motor sem jogada',
     promotionPrompt: 'Peca de promocao? (q=dama, r=torre, b=bispo, n=cavalo)',
+    promotionTitle: 'Escolha a peca de promocao',
+    promotionCancel: 'Cancelar',
     invalidPromotion: 'Promocao invalida. Use q, r, b ou n.',
   },
   it: {
@@ -248,309 +267,179 @@ const TRANSLATIONS = {
     engineRequestFailed: (msg) => `Richiesta al motore fallita: ${msg}`,
     invalidEngineMove: 'Risposta del motore senza mossa',
     promotionPrompt: 'Pezzo di promozione? (q=donna, r=torre, b=alfiere, n=cavallo)',
+    promotionTitle: 'Scegli il pezzo di promozione',
+    promotionCancel: 'Annulla',
     invalidPromotion: 'Promozione non valida. Usa q, r, b o n.',
   },
 }
 
-function parseUciMove(move) {
-  if (!move || move.length < 4) {
-    return null
-  }
-  return {
-    from: move.slice(0, 2),
-    to: move.slice(2, 4),
-    promotion: move.length >= 5 ? move.slice(4, 5).toLowerCase() : undefined,
-  }
-}
-
-function getFenFromUrl() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  const params = new URLSearchParams(window.location.search)
-  return params.get(URL_FEN_PARAM) || params.get('position')
-}
-
-function updateFenUrl(fen) {
-  if (typeof window === 'undefined') {
-    return
-  }
-  const url = new URL(window.location.href)
-  url.searchParams.set(URL_FEN_PARAM, fen)
-  url.searchParams.delete('position')
-  try {
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
-  } catch {
-    // Ignore history API restrictions (e.g. file:// or embedded contexts).
-  }
-}
-
-function safelyLoadFen(game, fen) {
-  try {
-    game.load(fen)
-    return true
-  } catch {
-    return false
-  }
-}
+// ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 function isDarkSquare(square) {
-  const file = square.charCodeAt(0) - 97 // a=0 ... h=7
-  const rank = Number(square[1]) // 1 ... 8
+  const file = square.charCodeAt(0) - 97 // a=0…h=7
+  const rank = Number(square[1])          // 1…8
   return (file + rank) % 2 === 1
 }
 
 function getLevelProfile(level) {
-  if (level <= 4) return 'levelBeginner'
-  if (level <= 9) return 'levelCasual'
+  if (level <= 4)  return 'levelBeginner'
+  if (level <= 9)  return 'levelCasual'
   if (level <= 14) return 'levelIntermediate'
   if (level <= 19) return 'levelAdvanced'
   return 'levelMax'
 }
 
+/**
+ * Approximate Elo for the given level (1–20), linearly mapped onto 800–2850.
+ * Useful for engines that support UCI_Elo (Stockfish, Rubi, Berserk, Caissa, LC0).
+ */
+function getLevelElo(level) {
+  if (level >= 20) return '~2850'
+  return `~${Math.round(800 + (level - 1) * ((2850 - 800) / 19))}`
+}
+
+function downloadTextFile(content, filename, mimeType = 'text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function App() {
+  // ── Preferences (localStorage + URL seed) ──────────────────────────────────
+  // Build the URL seed once at component creation time (before first render).
+  const urlSeed = useRef(null)
+  if (urlSeed.current === null) {
+    const seed = readUrlParams()
+    // If the URL has a FEN but no explicit color param, infer the player color
+    // from the side to move in the FEN (preserving legacy share-link behaviour).
+    if (seed.fen && !seed.playerColor) {
+      const turn = seed.fen.split(' ')[1] // 'w' or 'b'
+      if (turn === 'b' || turn === 'w') seed.playerColor = turn
+    }
+    urlSeed.current = seed
+  }
+  const {
+    engine: selectedEngine, setEngine: setSelectedEngine,
+    level,                  setLevel,
+    language,               setLanguage,
+    boardTheme,             setBoardTheme,
+    playerColor,            setPlayerColor,
+  } = usePreferences(urlSeed.current)
+
+  // ── Game state ──────────────────────────────────────────────────────────────
+  const { gameRef, fen, moves, applyMove, applyEngineMove, undoMoves, resetGame, loadFen, moveRows } =
+    useChessGame(urlSeed.current.fen)
+
+  // ── Engine ──────────────────────────────────────────────────────────────────
+  // Stable ref to current translation, used inside the engine hook callback.
+  const tRef = useRef(TRANSLATIONS[language] || TRANSLATIONS.en)
+  const getT = useCallback(() => tRef.current, [])
+  const { isThinking, engineError, clearEngineError, requestMove, cancelPending } =
+    useChessEngine(API_BASE, getT)
+
+  // ── Audio ───────────────────────────────────────────────────────────────────
+  const { playMoveSound, dispose: disposeAudio } = useChessAudio()
+
+  // ── Board widget ────────────────────────────────────────────────────────────
   const boardRef = useRef(null)
   const boardInitRef = useRef(false)
   const boardOrientationRef = useRef('white')
-  const audioContextRef = useRef(null)
-  const gameRef = useRef(new Chess())
-  const thinkingRef = useRef(false)
-  const engineRequestRef = useRef(0)
-  const playerColorRef = useRef('w')
-  const selectedEngineRef = useRef('stockfish')
-  const levelRef = useRef(5)
-  const languageRef = useRef('en')
-  const boardThemeRef = useRef('brownCream')
-  const initialFenRef = useRef(null)
+  const thinkingRef = useRef(false)  // Sync mirror of isThinking for use in callbacks.
 
-  if (initialFenRef.current === null) {
-    const fenFromUrl = getFenFromUrl()
-    if (fenFromUrl) {
-      const tempGame = new Chess()
-      if (safelyLoadFen(tempGame, fenFromUrl)) {
-        gameRef.current.load(tempGame.fen())
-        playerColorRef.current = tempGame.turn()
-        initialFenRef.current = tempGame.fen()
-      } else {
-        initialFenRef.current = ''
-      }
-    } else {
-      initialFenRef.current = ''
-    }
-  }
-
+  // ── Misc UI state ───────────────────────────────────────────────────────────
   const [ready, setReady] = useState(false)
   const [engines, setEngines] = useState([])
-  const [selectedEngine, setSelectedEngine] = useState('stockfish')
-  const [level, setLevel] = useState(5)
-  const [playerColor, setPlayerColor] = useState(playerColorRef.current)
-  const [boardTheme, setBoardTheme] = useState('brownCream')
-  const [language, setLanguage] = useState('en')
   const [status, setStatus] = useState(TRANSLATIONS.en.loadingBoard)
   const [error, setError] = useState('')
-  const [fenInput, setFenInput] = useState(gameRef.current.fen())
+  const [fenInput, setFenInput] = useState(() => gameRef.current.fen())
   const [fenError, setFenError] = useState('')
-  const [isThinking, setIsThinking] = useState(false)
-  const [moves, setMoves] = useState([])
   const [health, setHealth] = useState('unknown')
 
-  const t = TRANSLATIONS[language]
-  const moveRows = useMemo(() => {
-    const rows = []
-    for (let i = 0; i < moves.length; i += 2) {
-      rows.push({
-        turn: rows.length + 1,
-        white: moves[i]?.san || '',
-        black: moves[i + 1]?.san || '',
-      })
+  // ── Promotion modal state ───────────────────────────────────────────────────
+  const [promotionPending, setPromotionPending] = useState(null) // { from, to } | null
+  const promotionResolveRef = useRef(null) // (piece | null) => void
+
+  // ── Moves table scroll ──────────────────────────────────────────────────────
+  const movesScrollRef = useMovesScroll(moves.length)
+
+  // ── Derived ─────────────────────────────────────────────────────────────────
+  const t = TRANSLATIONS[language] || TRANSLATIONS.en
+
+  // Keep tRef in sync so the engine hook callback always has current translations.
+  useEffect(() => {
+    tRef.current = TRANSLATIONS[language] || TRANSLATIONS.en
+  }, [language])
+
+  // Keep thinkingRef in sync with engine hook state.
+  useEffect(() => {
+    thinkingRef.current = isThinking
+  }, [isThinking])
+
+  // Sync engineError into local error state.
+  useEffect(() => {
+    if (engineError) {
+      setError(engineError)
+      setStatus(t.moveFailed)
     }
-    return rows
-  }, [moves])
+  }, [engineError])
 
-  useEffect(() => {
-    selectedEngineRef.current = selectedEngine
-  }, [selectedEngine])
-
-  useEffect(() => {
-    levelRef.current = level
-  }, [level])
-
-  useEffect(() => {
-    playerColorRef.current = playerColor
-  }, [playerColor])
-
-  // Sync playerColor with FEN when loading from URL
-  useEffect(() => {
-    if (initialFenRef.current && initialFenRef.current !== '') {
-      setPlayerColor(playerColorRef.current)
-    }
-  }, [initialFenRef.current])
-
+  // Sync board theme to the 3D widget.
+  const boardThemeRef = useRef(boardTheme)
   useEffect(() => {
     boardThemeRef.current = boardTheme
-    syncBoardWithGame()
+    if (boardRef.current) boardRef.current.position(gameRef.current.fen(), false)
+    writeUrlParams({ boardTheme })
   }, [boardTheme])
 
+  // Persist language to URL.
   useEffect(() => {
-    const userLang = (navigator.language || 'en').slice(0, 2)
-    if (SUPPORTED_LANGS.includes(userLang)) {
-      setLanguage(userLang)
-      languageRef.current = userLang
-    }
-  }, [])
-
-  useEffect(() => {
-    languageRef.current = language
+    writeUrlParams({ language })
     refreshBoardStatus()
   }, [language])
 
+  // Persist engine + level to URL whenever they change.
+  useEffect(() => { writeUrlParams({ engine: selectedEngine }) }, [selectedEngine])
+  useEffect(() => { writeUrlParams({ level }) }, [level])
+
+  // ── Debounced FEN input ─────────────────────────────────────────────────────
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      const nextFen = fenInput.trim()
-      if (!nextFen || nextFen === gameRef.current.fen()) {
-        setFenError('')
-        return
-      }
-
-      const loaded = safelyLoadFen(gameRef.current, nextFen)
-      if (!loaded) {
-        setFenError(tt().invalidFen)
-        return
-      }
-
-      engineRequestRef.current += 1
-      setIsThinking(false)
-      thinkingRef.current = false
-      setMoves([])
+    const id = setTimeout(() => {
+      const next = fenInput.trim()
+      if (!next || next === gameRef.current.fen()) { setFenError(''); return }
+      const ok = loadFen(next)
+      if (!ok) { setFenError(t.invalidFen); return }
+      cancelPending()
       setError('')
       setFenError('')
-      if (boardRef.current) {
-        boardRef.current.position(gameRef.current.fen(), false)
-      }
-      syncFenState()
+      if (boardRef.current) boardRef.current.position(gameRef.current.fen(), false)
+      writeUrlParams({ fen: gameRef.current.fen() })
       refreshBoardStatus()
     }, 350)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
+    return () => clearTimeout(id)
   }, [fenInput])
 
-  function tt() {
-    return TRANSLATIONS[languageRef.current] || TRANSLATIONS.en
-  }
-
-  function syncFenState(syncUrl = true) {
-    const fen = gameRef.current.fen()
+  // Keep fenInput in sync when game state changes from outside (engine move, undo, etc.).
+  useEffect(() => {
     setFenInput(fen)
-    if (syncUrl) {
-      updateFenUrl(fen)
-    }
-  }
+    writeUrlParams({ fen })
+  }, [fen])
 
-  function syncBoardWithGame() {
-    if (boardRef.current) {
-      boardRef.current.position(gameRef.current.fen(), false)
-    }
-  }
-
-  function playPieceMoveSound() {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext
-    if (!AudioContextClass) {
-      return
-    }
-
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContextClass()
-      }
-
-      const ctx = audioContextRef.current
-      if (ctx.state === 'suspended') {
-        void ctx.resume()
-      }
-
-      const duration = 0.075
-      const now = ctx.currentTime
-      const frameCount = Math.floor(ctx.sampleRate * duration)
-      const noiseBuffer = ctx.createBuffer(1, frameCount, ctx.sampleRate)
-      const channelData = noiseBuffer.getChannelData(0)
-
-      for (let i = 0; i < frameCount; i += 1) {
-        const decay = 1 - (i / frameCount)
-        channelData[i] = (Math.random() * 2 - 1) * decay * decay
-      }
-
-      const noise = ctx.createBufferSource()
-      noise.buffer = noiseBuffer
-
-      const filter = ctx.createBiquadFilter()
-      filter.type = 'bandpass'
-      filter.frequency.setValueAtTime(1100, now)
-      filter.Q.setValueAtTime(0.9, now)
-
-      const gain = ctx.createGain()
-      gain.gain.setValueAtTime(0.0001, now)
-      gain.gain.exponentialRampToValueAtTime(0.14, now + 0.004)
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
-
-      noise.connect(filter)
-      filter.connect(gain)
-      gain.connect(ctx.destination)
-      noise.start(now)
-      noise.stop(now + duration)
-    } catch {
-      // Ignore audio errors (unsupported browser policy or blocked context).
-    }
-  }
-
-  function isPromotionMove(from, to) {
-    const piece = gameRef.current.get(from)
-    if (!piece || piece.type !== 'p') {
-      return false
-    }
-    return (piece.color === 'w' && to.endsWith('8')) || (piece.color === 'b' && to.endsWith('1'))
-  }
-
-  function normalizePromotionChoice(raw) {
-    if (!raw) {
-      return null
-    }
-    const value = raw.trim().toLowerCase()
-    if (['q', 'queen', 'dama', 'donna'].includes(value)) return 'q'
-    if (['r', 'rook', 'torre'].includes(value)) return 'r'
-    if (['b', 'bishop', 'alfil', 'bispo', 'alfiere'].includes(value)) return 'b'
-    if (['n', 'knight', 'caballo', 'cavalo', 'cavallo'].includes(value)) return 'n'
-    return null
-  }
-
-  function pickPromotionPiece() {
-    const choice = window.prompt(tt().promotionPrompt, 'q')
-    const normalized = normalizePromotionChoice(choice)
-    if (!normalized) {
-      setError(tt().invalidPromotion)
-      return null
-    }
-    return normalized
-  }
-
+  // ── Board initialisation ────────────────────────────────────────────────────
   useEffect(() => {
     let isMounted = true
 
     const initialize = async () => {
       try {
         await ensureChessboard3Loaded()
-        if (!isMounted) {
-          return
-        }
-
-        if (boardInitRef.current) {
-          return
-        }
+        if (!isMounted || boardInitRef.current) return
 
         boardRef.current = new window.ChessBoard3(BOARD_CONTAINER_ID, {
           position: 'start',
@@ -563,42 +452,41 @@ export default function App() {
           snapSpeed: 70,
           pieceSet: 'https://cdn.jsdelivr.net/gh/jtiscione/chessboard3js/assets/chesspieces/classic/{piece}.json',
           fontData: 'https://cdn.jsdelivr.net/gh/jtiscione/chessboard3js/assets/fonts/helvetiker_regular.typeface.json',
-          onDrop: (source, target, piece, newPos, oldPos) => {
-            if (thinkingRef.current) {
-              forceRollback(oldPos)
-              return 'snapback'
-            }
-            const dropResult = handlePlayerMove(source, target)
-            if (dropResult === 'snapback') {
-              forceRollback(oldPos)
-            }
-            return dropResult
+          onDrop: (source, target, _piece, _newPos, oldPos) => {
+            if (thinkingRef.current) { forceRollback(oldPos); return 'snapback' }
+            const result = handlePlayerDrop(source, target)
+            if (result === 'snapback') forceRollback(oldPos)
+            return result
           },
           onRender: (scene, squareMeshIds) => {
             const theme = BOARD_THEMES[boardThemeRef.current] || BOARD_THEMES.brownCream
-            Object.entries(squareMeshIds).forEach(([square, meshId]) => {
+            for (const [square, meshId] of Object.entries(squareMeshIds)) {
               const mesh = scene.getObjectById(meshId)
-              if (!mesh || !mesh.material || !mesh.material.color) {
-                return
+              if (mesh?.material?.color) {
+                mesh.material.color.setHex(isDarkSquare(square) ? theme.dark : theme.light)
               }
-              mesh.material.color.setHex(isDarkSquare(square) ? theme.dark : theme.light)
-            })
+            }
           },
           onMoveEnd: refreshBoardStatus,
         })
 
         boardInitRef.current = true
         setReady(true)
-        if (initialFenRef.current) {
-          syncBoardWithGame()
-          applyOrientation(playerColorRef.current)
-          syncFenState()
+
+        const initialFen = urlSeed.current.fen
+        if (initialFen) {
+          boardRef.current.position(gameRef.current.fen(), false)
+          applyOrientation(urlSeed.current.playerColor || gameRef.current.turn())
           refreshBoardStatus()
+          // If it's the engine's turn on load, let it move.
+          if (gameRef.current.turn() !== (urlSeed.current.playerColor || 'w')) {
+            setTimeout(() => doEngineMove(), 0)
+          }
         } else {
-          startNewGame(playerColorRef.current, false)
+          startNewGame(playerColor, false)
         }
       } catch (err) {
-        setError(err.message || tt().failedInit)
+        setError(err.message || t.failedInit)
       }
     }
 
@@ -608,17 +496,14 @@ export default function App() {
 
     return () => {
       isMounted = false
-      if (boardRef.current && boardRef.current.destroy) {
-        boardRef.current.destroy()
-      }
-      if (audioContextRef.current) {
-        void audioContextRef.current.close()
-      }
+      boardRef.current?.destroy?.()
       boardRef.current = null
       boardInitRef.current = false
-      audioContextRef.current = null
+      disposeAudio()
     }
   }, [])
+
+  // ── API helpers ─────────────────────────────────────────────────────────────
 
   async function fetchHealth() {
     try {
@@ -633,55 +518,40 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/engines`)
       if (!res.ok) {
-        let detail = ''
-        try {
-          const body = await res.json()
-          detail = body?.error || body?.message || ''
-        } catch {
-          // Ignore parse errors and keep status-only message.
-        }
+        const body = await res.json().catch(() => ({}))
+        const detail = body?.error || body?.message || ''
         throw new Error(detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`)
       }
       const data = await res.json()
-      const list = data.engines || []
-      setEngines(list)
-      if (data.default) {
-        setSelectedEngine(data.default)
-      }
+      setEngines(data.engines || [])
+      if (data.default) setSelectedEngine(data.default)
     } catch (err) {
       setEngines(FALLBACK_ENGINES.map((name) => ({ name, healthy: true })))
       setSelectedEngine('stockfish')
-      setError(tt().engineUnavailable(err.message))
+      setError(t.engineUnavailable(err.message))
     }
   }
 
+  // ── Board helpers ───────────────────────────────────────────────────────────
+
   function refreshBoardStatus() {
     const game = gameRef.current
+    const tt = tRef.current
     if (game.isGameOver()) {
       if (game.isCheckmate()) {
-        const winner = game.turn() === 'w' ? tt().black : tt().white
-        setStatus(tt().checkmate(winner))
-        return
+        const winner = game.turn() === 'w' ? tt.black : tt.white
+        setStatus(tt.checkmate(winner)); return
       }
-      if (game.isDraw()) {
-        setStatus(tt().draw)
-        return
-      }
-      setStatus(tt().gameOver)
-      return
+      if (game.isDraw()) { setStatus(tt.draw); return }
+      setStatus(tt.gameOver); return
     }
-
-    const side = game.turn() === 'w' ? tt().white : tt().black
-    const check = game.isCheck() ? tt().check : ''
-    setStatus(tt().toMove(side, check))
+    const side = game.turn() === 'w' ? tt.white : tt.black
+    setStatus(tt.toMove(side, game.isCheck() ? tt.check : ''))
   }
 
   function applyOrientation(color) {
     const board = boardRef.current
-    if (!board) {
-      return
-    }
-
+    if (!board) return
     const desired = color === 'w' ? 'white' : 'black'
     if (typeof board.orientation === 'function') {
       try {
@@ -689,278 +559,203 @@ export default function App() {
         const current = board.orientation()
         if (current === 'white' || current === 'black') {
           boardOrientationRef.current = current
-          if (current === desired) {
-            return
-          }
+          if (current === desired) return
         }
-      } catch {
-        // Fallback to flip if this build does not support orientation().
-      }
+      } catch { /* Fallback to flip below. */ }
     }
-
     if (desired !== boardOrientationRef.current && typeof board.flip === 'function') {
       board.flip()
       boardOrientationRef.current = desired
     }
   }
 
-  function startNewGame(color = playerColorRef.current, syncUrl = true) {
-    playerColorRef.current = color
+  function forceRollback(oldPos) {
+    if (!boardRef.current || !oldPos) return
+    setTimeout(() => { boardRef.current?.position(oldPos, false) }, 0)
+  }
+
+  // ── Promotion modal (async) ─────────────────────────────────────────────────
+
+  function isPromotionMove(from, to) {
+    const piece = gameRef.current.get(from)
+    if (!piece || piece.type !== 'p') return false
+    return (piece.color === 'w' && to.endsWith('8')) || (piece.color === 'b' && to.endsWith('1'))
+  }
+
+  /**
+   * Shows the promotion modal and returns a promise that resolves with the
+   * chosen piece ('q'|'r'|'b'|'n') or null if the player cancels.
+   */
+  function pickPromotionPiece(from, to) {
+    return new Promise((resolve) => {
+      promotionResolveRef.current = resolve
+      setPromotionPending({ from, to })
+    })
+  }
+
+  function handlePromotionChoose(piece) {
+    setPromotionPending(null)
+    promotionResolveRef.current?.(piece)
+    promotionResolveRef.current = null
+  }
+
+  function handlePromotionCancel() {
+    setPromotionPending(null)
+    promotionResolveRef.current?.(null)
+    promotionResolveRef.current = null
+  }
+
+  // ── Game actions ────────────────────────────────────────────────────────────
+
+  function startNewGame(color = playerColor, syncUrl = true) {
     setPlayerColor(color)
-    gameRef.current.reset()
-    setMoves([])
+    cancelPending()
+    resetGame()
     setError('')
-    setIsThinking(false)
-    thinkingRef.current = false
-    engineRequestRef.current += 1
+    clearEngineError()
 
     if (boardRef.current) {
       boardRef.current.position('start', false)
       applyOrientation(color)
     }
 
-    syncFenState(syncUrl)
+    if (syncUrl) writeUrlParams({ fen: gameRef.current.fen(), playerColor: color })
     refreshBoardStatus()
 
-    if (color === 'b') {
-      window.setTimeout(() => {
-        requestEngineMove()
-      }, 0)
-    }
+    if (color === 'b') setTimeout(() => doEngineMove(color), 0)
   }
 
-  function handlePlayerMove(source, target) {
-    if (target === 'offboard') {
-      return 'snapback'
-    }
-
+  /**
+   * Called by the board's onDrop callback.  Returns undefined (accept) or
+   * 'snapback' (reject).  Async moves (promotion) are handled via the modal.
+   */
+  function handlePlayerDrop(source, target) {
+    if (target === 'offboard') return 'snapback'
     const game = gameRef.current
-    if (game.turn() !== playerColorRef.current) {
-      return 'snapback'
-    }
+    if (game.turn() !== playerColor) return 'snapback'
 
-    let promotion
     if (isPromotionMove(source, target)) {
-      promotion = pickPromotionPiece()
-      if (!promotion) {
-        return 'snapback'
-      }
-    }
-
-    const move = game.move({ from: source, to: target, promotion })
-    if (!move) {
+      // We can't await here (onDrop is synchronous), so we snapback the piece
+      // immediately and re-apply the move after the player chooses the piece.
+      setTimeout(async () => {
+        const piece = await pickPromotionPiece(source, target)
+        if (!piece) return
+        const move = applyMove(source, target, piece)
+        if (!move) return
+        boardRef.current?.position(gameRef.current.fen(), false)
+        playMoveSound()
+        refreshBoardStatus()
+        writeUrlParams({ fen: gameRef.current.fen() })
+        setTimeout(() => doEngineMove(), 0)
+      }, 0)
       return 'snapback'
     }
 
-    setMoves((prev) => [...prev, { color: move.color, san: move.san }])
-    syncFenState()
-    playPieceMoveSound()
-    refreshBoardStatus()
+    const move = applyMove(source, target)
+    if (!move) return 'snapback'
 
-    // Avoid forcing a full position sync during onDrop for normal moves,
-    // because it can hide the dragged piece in some chessboard3 builds.
-    // Sync only for special rules where extra pieces move/remove.
+    playMoveSound()
+    refreshBoardStatus()
+    writeUrlParams({ fen: gameRef.current.fen() })
+
+    // Sync the board for moves that change extra squares (castling, en-passant, promotion).
     if (['k', 'q', 'e', 'p'].some((flag) => move.flags.includes(flag))) {
-      window.setTimeout(() => {
-        syncBoardWithGame()
-      }, 120)
+      setTimeout(() => { boardRef.current?.position(gameRef.current.fen(), false) }, 120)
     }
 
-    window.setTimeout(() => {
-      requestEngineMove()
-    }, 0)
-
+    setTimeout(() => doEngineMove(), 0)
     return undefined
   }
 
-  function forceRollback(oldPos) {
-    if (!boardRef.current || !oldPos) {
-      return
-    }
-    // Force widget state back to pre-drag layout if internal snapback fails.
-    window.setTimeout(() => {
-      if (boardRef.current) {
-        boardRef.current.position(oldPos, false)
-      }
-    }, 0)
-  }
-
-  async function requestEngineMove() {
-    const game = gameRef.current
-    if (thinkingRef.current || game.isGameOver() || game.turn() === playerColorRef.current) {
-      return
-    }
-
-    const engineToUse = selectedEngineRef.current
-    const levelToUse = levelRef.current
-    const requestId = ++engineRequestRef.current
-
-    setIsThinking(true)
-    thinkingRef.current = true
-    setError('')
-    setStatus(tt().thinking(engineToUse))
-
-    try {
-      const payload = {
-        fen: game.fen(),
-        engine: engineToUse,
-        level: levelToUse,
-      }
-
-      const res = await fetch(`${API_BASE}/move`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await res.json()
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || `HTTP ${res.status}`)
-      }
-      if (requestId !== engineRequestRef.current) {
-        return
-      }
-
-      const from = data?.response?.from
-      const to = data?.response?.to
-      const promotion = data?.response?.promotion
-      if (!from || !to) {
-        const parsed = parseUciMove(data?.response?.move)
-        if (!parsed) {
-          throw new Error(tt().invalidEngineMove)
-        }
-        applyEngineMove(parsed.from, parsed.to, data?.response?.san, parsed.promotion)
-      } else {
-        applyEngineMove(from, to, data?.response?.san, promotion)
-      }
-    } catch (err) {
-      setError(tt().engineRequestFailed(err.message))
-      setStatus(tt().moveFailed)
-    } finally {
-      if (requestId !== engineRequestRef.current) {
-        return
-      }
-      setIsThinking(false)
-      thinkingRef.current = false
-      refreshBoardStatus()
-    }
-  }
-
-  function applyEngineMove(from, to, sanFromApi, promotion) {
-    const game = gameRef.current
-    const move = game.move({ from, to, promotion })
-    if (!move) {
-      throw new Error(`Engine returned invalid move: ${from}${to}`)
-    }
-
-    syncBoardWithGame()
-    setMoves((prev) => [...prev, { color: move.color, san: sanFromApi || move.san }])
-    syncFenState()
-    playPieceMoveSound()
-  }
-
   function undoLastMove() {
-    let undoneCount = 0
-    for (let i = 0; i < 2; i += 1) {
-      const undone = gameRef.current.undo()
-      if (!undone) {
-        break
-      }
-      undoneCount += 1
-    }
-
-    if (undoneCount === 0) {
-      return
-    }
-
-    engineRequestRef.current += 1
-    setIsThinking(false)
-    thinkingRef.current = false
-    setMoves((prev) => prev.slice(0, Math.max(0, prev.length - undoneCount)))
-    syncBoardWithGame()
-    syncFenState()
+    const count = undoMoves()
+    if (count === 0) return
+    cancelPending()
+    boardRef.current?.position(gameRef.current.fen(), false)
+    writeUrlParams({ fen: gameRef.current.fen() })
     refreshBoardStatus()
   }
 
   function flipBoard() {
-    if (boardRef.current) {
-      boardRef.current.flip()
-      boardOrientationRef.current = boardOrientationRef.current === 'white' ? 'black' : 'white'
+    if (!boardRef.current) return
+    boardRef.current.flip()
+    boardOrientationRef.current = boardOrientationRef.current === 'white' ? 'black' : 'white'
+  }
+
+  // ── Engine move ─────────────────────────────────────────────────────────────
+
+  async function doEngineMove(colorOverride) {
+    const color = colorOverride ?? playerColor
+    const game = gameRef.current
+    if (thinkingRef.current || game.isGameOver() || game.turn() === color) return
+
+    setStatus(tRef.current.thinking(selectedEngine))
+
+    try {
+      const moveResult = await requestMove(game.fen(), selectedEngine, level)
+      if (!moveResult) return  // Aborted or superseded.
+
+      const { from, to, san, promotion } = moveResult
+      applyEngineMove(from, to, san, promotion)
+      boardRef.current?.position(gameRef.current.fen(), false)
+      playMoveSound()
+      writeUrlParams({ fen: gameRef.current.fen() })
+    } catch {
+      // Error already surfaced via engineError → local error state.
+    } finally {
+      refreshBoardStatus()
     }
   }
+
+  // ── PGN / PNG ───────────────────────────────────────────────────────────────
 
   function buildPgnText() {
-    const pgn = gameRef.current.pgn({ maxWidth: 100, newline: '\n' }).trim()
-    return pgn || '*'
-  }
-
-  function downloadTextFile(content, filename, mimeType = 'text/plain;charset=utf-8') {
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function downloadPgnFile() {
-    setError('')
-    try {
-      const pgn = buildPgnText()
-      downloadTextFile(pgn, 'chess3d-game.pgn', 'application/x-chess-pgn;charset=utf-8')
-      setStatus(tt().downloadedPgnText)
-    } catch (err) {
-      setError(tt().copyPgnFailed(err?.message || tt().clipboardSecure))
-    }
+    return gameRef.current.pgn({ maxWidth: 100, newline: '\n' }).trim() || '*'
   }
 
   async function copyPgnToClipboard() {
     setError('')
-
     try {
-      const canCopy =
-        window.isSecureContext
-        && !!navigator.clipboard
-        && typeof navigator.clipboard.writeText === 'function'
-      const canVerifyClipboard =
-        window.isSecureContext
-        && !!navigator.clipboard
-        && typeof navigator.clipboard.readText === 'function'
+      const canCopy = window.isSecureContext && typeof navigator.clipboard?.writeText === 'function'
+      const canVerify = canCopy && typeof navigator.clipboard?.readText === 'function'
       const pgn = buildPgnText()
 
       if (canCopy) {
         try {
           await navigator.clipboard.writeText(pgn)
-
-          if (canVerifyClipboard) {
+          if (canVerify) {
             const text = await navigator.clipboard.readText()
-            const normalizedExpected = pgn.replace(/\r\n/g, '\n').trim()
-            const normalizedActual = (text || '').replace(/\r\n/g, '\n').trim()
-            if (!normalizedActual || !normalizedExpected.startsWith(normalizedActual.slice(0, 20))) {
-              throw new Error(tt().clipboardSecure)
-            }
-            setStatus(tt().copiedPgn)
-            return
-          } else {
-            setStatus(tt().copiedPgn)
-            return
+            const expected = pgn.replace(/\r\n/g, '\n').trim()
+            const actual = (text || '').replace(/\r\n/g, '\n').trim()
+            if (!actual || !expected.startsWith(actual.slice(0, 20))) throw new Error(t.clipboardSecure)
           }
-        } catch {
-          // Fall through to file download when clipboard copy is blocked/incompatible.
-        }
+          setStatus(t.copiedPgn)
+          return
+        } catch { /* Fall through to download. */ }
       }
 
       downloadTextFile(pgn, 'chess3d-game.pgn', 'application/x-chess-pgn;charset=utf-8')
-      setStatus(tt().downloadedPgnText)
+      setStatus(t.downloadedPgnText)
     } catch (err) {
-      setError(tt().copyPgnFailed(err?.message || tt().clipboardSecure))
+      setError(t.copyPgnFailed(err?.message || t.clipboardSecure))
     }
   }
+
+  async function downloadPgnFile() {
+    setError('')
+    try {
+      downloadTextFile(buildPgnText(), 'chess3d-game.pgn', 'application/x-chess-pgn;charset=utf-8')
+      setStatus(t.downloadedPgnText)
+    } catch (err) {
+      setError(t.copyPgnFailed(err?.message || t.clipboardSecure))
+    }
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const levelProfile = t[getLevelProfile(level)]
+  const levelElo = getLevelElo(level)
+  const levelAriaText = `${level} — ${levelProfile} (${levelElo} Elo)`
 
   return (
     <div className="app">
@@ -971,52 +766,74 @@ export default function App() {
           {t.title}
         </h1>
         {health !== 'ok' && health !== 'unknown' && (
-          <div className={`health health-${health}`}>{t.health}: {health}</div>
+          <div className={`health health-${health}`} role="status">
+            {t.health}: {health}
+          </div>
         )}
       </header>
 
       <main className="layout">
-        <section className="board-panel">
+        <section className="board-panel" aria-label="Chess board">
           <div id={BOARD_CONTAINER_ID} className="board-host" />
           {!ready && <p className="hint">{t.loadingBoard}</p>}
         </section>
 
-        <aside className="side-panel">
+        <aside className="side-panel" aria-label="Game controls">
           <div className="controls">
-            <label>
+
+            {/* Engine selector */}
+            <label htmlFor="engine-select">
               {t.engine}
-              <select value={selectedEngine} onChange={(e) => setSelectedEngine(e.target.value)}>
+              <select
+                id="engine-select"
+                value={selectedEngine}
+                onChange={(e) => setSelectedEngine(e.target.value)}
+              >
                 {engines.length === 0 && <option value="stockfish">stockfish</option>}
-                {engines.map((engine) => (
-                  <option key={engine.name} value={engine.name}>
-                    {engine.name} {engine.healthy ? '' : '(unhealthy)'}
+                {engines.map((eng) => (
+                  <option key={eng.name} value={eng.name}>
+                    {eng.name}{eng.healthy ? '' : ' (unhealthy)'}
                   </option>
                 ))}
               </select>
             </label>
 
-            <label>
-              {t.level}: {level} — {t[getLevelProfile(level)]}
+            {/* Level slider — #10 aria-valuetext */}
+            <label htmlFor="level-slider">
+              {t.level}: {level} — {levelProfile}
+              <span className="level-elo" aria-hidden="true"> ({levelElo} Elo)</span>
               <input
+                id="level-slider"
                 type="range"
                 min="1"
                 max="20"
                 value={level}
+                aria-valuetext={levelAriaText}
                 onChange={(e) => setLevel(Number(e.target.value))}
               />
             </label>
 
-            <label>
+            {/* Play as */}
+            <label htmlFor="color-select">
               {t.playAs}
-              <select value={playerColor} onChange={(e) => startNewGame(e.target.value)}>
+              <select
+                id="color-select"
+                value={playerColor}
+                onChange={(e) => startNewGame(e.target.value)}
+              >
                 <option value="w">{t.white}</option>
                 <option value="b">{t.black}</option>
               </select>
             </label>
 
-            <label>
+            {/* Board theme */}
+            <label htmlFor="theme-select">
               {t.boardTheme}
-              <select value={boardTheme} onChange={(e) => setBoardTheme(e.target.value)}>
+              <select
+                id="theme-select"
+                value={boardTheme}
+                onChange={(e) => setBoardTheme(e.target.value)}
+              >
                 <option value="brownCream">{t.themeBrownCream}</option>
                 <option value="whiteGray">{t.themeWhiteGray}</option>
                 <option value="skyBlue">{t.themeSkyBlue}</option>
@@ -1024,41 +841,50 @@ export default function App() {
               </select>
             </label>
 
-            <div className="actions">
+            {/* Action buttons */}
+            <div className="actions" role="group" aria-label="Game actions">
               <button type="button" onClick={() => startNewGame()}>{t.newGame}</button>
               <button type="button" onClick={undoLastMove}>{t.undo}</button>
               <button type="button" onClick={flipBoard}>{t.flip}</button>
               <button type="button" onClick={copyPgnToClipboard}>{t.copyPgn}</button>
-              <button type="button" onClick={requestEngineMove} disabled={isThinking || gameRef.current.turn() === playerColor}>
+              <button
+                type="button"
+                onClick={() => doEngineMove()}
+                disabled={isThinking || gameRef.current.turn() === playerColor}
+              >
                 {t.engineMoveNow}
               </button>
             </div>
           </div>
 
-          <div className="status">
+          {/* Status + FEN */}
+          <div className="status" role="status" aria-live="polite">
             <p><strong>{t.statusLabel}:</strong> {status}</p>
-            <label className="fen-field">
+            <label className="fen-field" htmlFor="fen-input">
               <span>{t.fen}:</span>
               <input
+                id="fen-input"
                 type="text"
                 value={fenInput}
                 onChange={(e) => setFenInput(e.target.value)}
                 spellCheck={false}
+                aria-label={t.fen}
               />
             </label>
-            {fenError && <p className="error">{fenError}</p>}
-            {error && <p className="error">{error}</p>}
+            {fenError && <p className="error" role="alert">{fenError}</p>}
+            {error   && <p className="error" role="alert">{error}</p>}
           </div>
 
+          {/* Moves table */}
           <div className="moves">
             <h2>{t.moves}</h2>
-            <div className="moves-table-wrap">
-              <table className="moves-table">
+            <div className="moves-table-wrap" ref={movesScrollRef}>
+              <table className="moves-table" aria-label={t.moves}>
                 <thead>
                   <tr>
-                    <th>{t.turn}</th>
-                    <th>{t.white}</th>
-                    <th>{t.black}</th>
+                    <th scope="col">{t.turn}</th>
+                    <th scope="col">{t.white}</th>
+                    <th scope="col">{t.black}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1074,19 +900,33 @@ export default function App() {
             </div>
           </div>
 
+          {/* Language picker */}
           <div className="language-picker">
-            <label>
+            <label htmlFor="lang-select">
               {t.language}
-              <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <select
+                id="lang-select"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+              >
                 <option value="en">English</option>
-                <option value="es">Espanol</option>
-                <option value="pt">Portugues</option>
+                <option value="es">Español</option>
+                <option value="pt">Português</option>
                 <option value="it">Italiano</option>
               </select>
             </label>
           </div>
         </aside>
       </main>
+
+      {/* Promotion modal */}
+      <PromotionModal
+        open={promotionPending !== null}
+        color={promotionPending ? gameRef.current.get(promotionPending.from)?.color : 'w'}
+        onChoose={handlePromotionChoose}
+        onCancel={handlePromotionCancel}
+        t={t}
+      />
     </div>
   )
 }
