@@ -372,6 +372,7 @@ export default function App() {
   const boardRef = useRef(null)
   const boardInitRef = useRef(false)
   const boardOrientationRef = useRef('white')
+  const boardResizeObserverRef = useRef(null)
   const thinkingRef = useRef(false)  // Sync mirror of isThinking for use in callbacks.
 
   // ── Misc UI state ───────────────────────────────────────────────────────────
@@ -474,6 +475,7 @@ export default function App() {
           draggable: true,
           dropOffBoard: 'snapback',
           showNotation: true,
+          notationColor: 0xffffff,
           backgroundColor: 0x0b0b0b,
           moveSpeed: 150,
           snapbackSpeed: 90,
@@ -511,6 +513,14 @@ export default function App() {
         boardInitRef.current = true
         setReady(true)
 
+        if (typeof ResizeObserver !== 'undefined') {
+          const host = document.getElementById(BOARD_CONTAINER_ID)
+          boardResizeObserverRef.current = new ResizeObserver(() => {
+            requestAnimationFrame(() => boardRef.current?.resize?.())
+          })
+          if (host) boardResizeObserverRef.current.observe(host)
+        }
+
         const initialFen = urlSeed.current.fen
         if (initialFen) {
           boardRef.current.position(gameRef.current.fen(), false)
@@ -534,6 +544,8 @@ export default function App() {
 
     return () => {
       isMounted = false
+      boardResizeObserverRef.current?.disconnect()
+      boardResizeObserverRef.current = null
       boardRef.current?.destroy?.()
       boardRef.current = null
       boardInitRef.current = false
