@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureChessboard3Loaded } from './loadChessboard3'
 
 const SCRIPT_URLS = [
-  'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js',
+  'https://cdn.jsdelivr.net/npm/jquery@4.1.0/dist/jquery.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r80/three.min.js',
   'https://cdn.jsdelivr.net/gh/jtiscione/chessboard3js/js/OrbitControls.js',
   'https://cdn.jsdelivr.net/gh/jtiscione/chessboard3js/js/chessboard3.js',
@@ -101,7 +101,7 @@ describe('ensureChessboard3Loaded', () => {
     })
 
     await expect(ensureChessboard3Loaded()).rejects.toThrow(
-      'Failed to load https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js',
+      'Failed to load https://cdn.jsdelivr.net/npm/jquery@4.1.0/dist/jquery.min.js',
     )
   })
 

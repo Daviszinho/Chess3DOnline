@@ -1,5 +1,5 @@
 const scripts = [
-  'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js',
+  'https://cdn.jsdelivr.net/npm/jquery@4.1.0/dist/jquery.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r80/three.min.js',
   'https://cdn.jsdelivr.net/gh/jtiscione/chessboard3js/js/OrbitControls.js',
   'https://cdn.jsdelivr.net/gh/jtiscione/chessboard3js/js/chessboard3.js',
