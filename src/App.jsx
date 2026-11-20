@@ -90,6 +90,11 @@ const TRANSLATIONS = {
     promotionTitle: 'Choose promotion piece',
     promotionCancel: 'Cancel',
     invalidPromotion: 'Invalid promotion piece. Use q, r, b, or n.',
+    sharePosition: 'Share',
+    shareCopied: 'Link copied!',
+    newGameConfirm: 'Start a new game? Current game will be lost.',
+    newGameConfirmYes: 'New game',
+    newGameConfirmNo: 'Keep playing',
   },
   es: {
     title: 'Chess 3D Online',
@@ -150,6 +155,11 @@ const TRANSLATIONS = {
     promotionTitle: 'Elige pieza de promocion',
     promotionCancel: 'Cancelar',
     invalidPromotion: 'Promocion invalida. Usa q, r, b o n.',
+    sharePosition: 'Compartir',
+    shareCopied: '¡Enlace copiado!',
+    newGameConfirm: '¿Nueva partida? Se perderá la partida actual.',
+    newGameConfirmYes: 'Nueva partida',
+    newGameConfirmNo: 'Seguir jugando',
   },
   pt: {
     title: 'Chess 3D Online',
@@ -210,6 +220,11 @@ const TRANSLATIONS = {
     promotionTitle: 'Escolha a peca de promocao',
     promotionCancel: 'Cancelar',
     invalidPromotion: 'Promocao invalida. Use q, r, b ou n.',
+    sharePosition: 'Compartilhar',
+    shareCopied: 'Link copiado!',
+    newGameConfirm: 'Novo jogo? O jogo atual sera perdido.',
+    newGameConfirmYes: 'Novo jogo',
+    newGameConfirmNo: 'Continuar',
   },
   it: {
     title: 'Chess 3D Online',
@@ -270,6 +285,11 @@ const TRANSLATIONS = {
     promotionTitle: 'Scegli il pezzo di promozione',
     promotionCancel: 'Annulla',
     invalidPromotion: 'Promozione non valida. Usa q, r, b o n.',
+    sharePosition: 'Condividi',
+    shareCopied: 'Link copiato!',
+    newGameConfirm: 'Nuova partita? La partita attuale andrà persa.',
+    newGameConfirmYes: 'Nuova partita',
+    newGameConfirmNo: 'Continua',
   },
 }
 
@@ -362,6 +382,14 @@ export default function App() {
   const [fenInput, setFenInput] = useState(() => gameRef.current.fen())
   const [fenError, setFenError] = useState('')
   const [health, setHealth] = useState('unknown')
+
+  // ── Last move highlight ─────────────────────────────────────────────────────
+  // Stores { from, to } of the last move so onRender can tint those squares.
+  const lastMoveRef = useRef(null)
+  const [lastMove, setLastMove] = useState(null) // reactive copy for the moves table
+
+  // ── New-game confirmation dialog ────────────────────────────────────────────
+  const [confirmNewGame, setConfirmNewGame] = useState(false)
 
   // ── Promotion modal state ───────────────────────────────────────────────────
   const [promotionPending, setPromotionPending] = useState(null) // { from, to } | null
@@ -460,9 +488,19 @@ export default function App() {
           },
           onRender: (scene, squareMeshIds) => {
             const theme = BOARD_THEMES[boardThemeRef.current] || BOARD_THEMES.brownCream
+            const lm = lastMoveRef.current
             for (const [square, meshId] of Object.entries(squareMeshIds)) {
               const mesh = scene.getObjectById(meshId)
-              if (mesh?.material?.color) {
+              if (!mesh?.material?.color) continue
+              const isHighlighted = lm && (square === lm.from || square === lm.to)
+              if (isHighlighted) {
+                // Blend theme color with a blue tint for the last-move squares.
+                const base = isDarkSquare(square) ? theme.dark : theme.light
+                const r = ((base >> 16) & 0xff) * 0.55 + 0x3b * 0.45
+                const g = ((base >>  8) & 0xff) * 0.55 + 0x82 * 0.45
+                const b = ( base        & 0xff) * 0.55 + 0xf6 * 0.45
+                mesh.material.color.setRGB(r / 255, g / 255, b / 255)
+              } else {
                 mesh.material.color.setHex(isDarkSquare(square) ? theme.dark : theme.light)
               }
             }
@@ -607,10 +645,22 @@ export default function App() {
 
   // ── Game actions ────────────────────────────────────────────────────────────
 
+  function recordLastMove(from, to) {
+    lastMoveRef.current = { from, to }
+    setLastMove({ from, to })
+  }
+
+  function clearLastMove() {
+    lastMoveRef.current = null
+    setLastMove(null)
+  }
+
   function startNewGame(color = playerColor, syncUrl = true) {
+    setConfirmNewGame(false)
     setPlayerColor(color)
     cancelPending()
     resetGame()
+    clearLastMove()
     setError('')
     clearEngineError()
 
@@ -635,13 +685,12 @@ export default function App() {
     if (game.turn() !== playerColor) return 'snapback'
 
     if (isPromotionMove(source, target)) {
-      // We can't await here (onDrop is synchronous), so we snapback the piece
-      // immediately and re-apply the move after the player chooses the piece.
       setTimeout(async () => {
         const piece = await pickPromotionPiece(source, target)
         if (!piece) return
         const move = applyMove(source, target, piece)
         if (!move) return
+        recordLastMove(source, target)
         boardRef.current?.position(gameRef.current.fen(), false)
         playMoveSound()
         refreshBoardStatus()
@@ -654,6 +703,7 @@ export default function App() {
     const move = applyMove(source, target)
     if (!move) return 'snapback'
 
+    recordLastMove(source, target)
     playMoveSound()
     refreshBoardStatus()
     writeUrlParams({ fen: gameRef.current.fen() })
@@ -671,6 +721,7 @@ export default function App() {
     const count = undoMoves()
     if (count === 0) return
     cancelPending()
+    clearLastMove()
     boardRef.current?.position(gameRef.current.fen(), false)
     writeUrlParams({ fen: gameRef.current.fen() })
     refreshBoardStatus()
@@ -697,6 +748,7 @@ export default function App() {
 
       const { from, to, san, promotion } = moveResult
       applyEngineMove(from, to, san, promotion)
+      recordLastMove(from, to)
       boardRef.current?.position(gameRef.current.fen(), false)
       playMoveSound()
       writeUrlParams({ fen: gameRef.current.fen() })
@@ -751,11 +803,33 @@ export default function App() {
     }
   }
 
+  async function sharePosition() {
+    const url = window.location.href
+    try {
+      if (window.isSecureContext && typeof navigator.clipboard?.writeText === 'function') {
+        await navigator.clipboard.writeText(url)
+      } else {
+        // Fallback: select a temporary input
+        const input = document.createElement('input')
+        input.value = url
+        document.body.appendChild(input)
+        input.select()
+        document.execCommand('copy')
+        document.body.removeChild(input)
+      }
+      setStatus(t.shareCopied)
+    } catch {
+      setStatus(url) // Last resort: just show the URL in the status area
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const levelProfile = t[getLevelProfile(level)]
   const levelElo = getLevelElo(level)
   const levelAriaText = `${level} — ${levelProfile} (${levelElo} Elo)`
+  // Index of the last half-move in the moves array (for table highlighting)
+  const lastMoveIndex = moves.length - 1
 
   return (
     <div className="app">
@@ -774,7 +848,11 @@ export default function App() {
 
       <main className="layout">
         <section className="board-panel" aria-label="Chess board">
-          <div id={BOARD_CONTAINER_ID} className="board-host" />
+          {/* Thinking progress bar sits along the top edge of the board */}
+          <div className="board-host-wrap">
+            {isThinking && <div className="thinking-bar" aria-hidden="true" />}
+            <div id={BOARD_CONTAINER_ID} className="board-host" />
+          </div>
           {!ready && <p className="hint">{t.loadingBoard}</p>}
         </section>
 
@@ -798,7 +876,7 @@ export default function App() {
               </select>
             </label>
 
-            {/* Level slider — #10 aria-valuetext */}
+            {/* Level slider */}
             <label htmlFor="level-slider">
               {t.level}: {level} — {levelProfile}
               <span className="level-elo" aria-hidden="true"> ({levelElo} Elo)</span>
@@ -843,23 +921,65 @@ export default function App() {
 
             {/* Action buttons */}
             <div className="actions" role="group" aria-label="Game actions">
-              <button type="button" onClick={() => startNewGame()}>{t.newGame}</button>
+              <button
+                type="button"
+                onClick={() => moves.length > 0 ? setConfirmNewGame(true) : startNewGame()}
+              >
+                {t.newGame}
+              </button>
               <button type="button" onClick={undoLastMove}>{t.undo}</button>
               <button type="button" onClick={flipBoard}>{t.flip}</button>
               <button type="button" onClick={copyPgnToClipboard}>{t.copyPgn}</button>
               <button
                 type="button"
+                className="btn-primary"
                 onClick={() => doEngineMove()}
                 disabled={isThinking || gameRef.current.turn() === playerColor}
               >
                 {t.engineMoveNow}
               </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={sharePosition}
+                title={t.sharePosition}
+              >
+                {t.sharePosition}
+              </button>
             </div>
+
+            {/* Inline new-game confirmation — no window.confirm() */}
+            {confirmNewGame && (
+              <div className="confirm-dialog" role="alertdialog" aria-live="assertive">
+                <span>{t.newGameConfirm}</span>
+                <div className="confirm-dialog-btns">
+                  <button
+                    type="button"
+                    className="btn-danger"
+                    onClick={() => startNewGame()}
+                  >
+                    {t.newGameConfirmYes}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmNewGame(false)}
+                  >
+                    {t.newGameConfirmNo}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Status + FEN */}
+          {/* Status + thinking badge + FEN */}
           <div className="status" role="status" aria-live="polite">
             <p><strong>{t.statusLabel}:</strong> {status}</p>
+            {isThinking && (
+              <div className="thinking-badge" aria-live="polite">
+                <span className="spinner" aria-hidden="true" />
+                {tRef.current.thinking(selectedEngine)}
+              </div>
+            )}
             <label className="fen-field" htmlFor="fen-input">
               <span>{t.fen}:</span>
               <input
@@ -875,7 +995,7 @@ export default function App() {
             {error   && <p className="error" role="alert">{error}</p>}
           </div>
 
-          {/* Moves table */}
+          {/* Moves table — last move row highlighted */}
           <div className="moves">
             <h2>{t.moves}</h2>
             <div className="moves-table-wrap" ref={movesScrollRef}>
@@ -888,13 +1008,20 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {moveRows.map((row) => (
-                    <tr key={row.turn}>
-                      <td>{row.turn}</td>
-                      <td>{row.white}</td>
-                      <td>{row.black}</td>
-                    </tr>
-                  ))}
+                  {moveRows.map((row) => {
+                    // Row index in half-moves: white is 2*(row.turn-1), black is 2*(row.turn-1)+1
+                    const whiteIdx = (row.turn - 1) * 2
+                    const blackIdx = whiteIdx + 1
+                    const isLastRow = blackIdx === lastMoveIndex || whiteIdx === lastMoveIndex
+                    const lastIsBlack = blackIdx === lastMoveIndex
+                    return (
+                      <tr key={row.turn} className={isLastRow ? 'last-move-row' : ''}>
+                        <td>{row.turn}</td>
+                        <td className={isLastRow && !lastIsBlack ? 'last-move-cell' : ''}>{row.white}</td>
+                        <td className={isLastRow && lastIsBlack  ? 'last-move-cell' : ''}>{row.black}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
